@@ -75,7 +75,7 @@ class CameraThread(QThread):
 
     def start_test(self):
         self._testing = True
-        self._countdown = 2
+        self._countdown = 3  # Changed to 3 to match the countdown sequence
 
     def run(self):
         cap = cv2.VideoCapture(self.gstreamer_pipeline(), cv2.CAP_GSTREAMER)
@@ -95,11 +95,19 @@ class CameraThread(QThread):
                 
                 if self._testing:
                     if self._countdown > 0:
+                        # Emit countdown signal first before processing frame
+                        self.countdown_signal.emit(self._countdown)
                         cv2.putText(processed_frame, f"{self._countdown}", 
                                     (processed_frame.shape[1]//2 - 20, processed_frame.shape[0]//2 + 20), 
                                     cv2.FONT_HERSHEY_DUPLEX, 1.5, (255, 0, 0), 4, cv2.LINE_AA)
-                        self.countdown_signal.emit(self._countdown)
                         self._countdown -= 1
+                        time.sleep(1)  # Consistent 1-second delay
+                    elif self._countdown == 0:
+                        self.countdown_signal.emit(-1)  # Signal for "IMAGE CAPTURED"
+                        cv2.putText(processed_frame, "IMAGE CAPTURED", 
+                                    (processed_frame.shape[1]//2 - 120, processed_frame.shape[0]//2 + 20), 
+                                    cv2.FONT_HERSHEY_DUPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
+                        self._countdown = -1
                         time.sleep(1)
                     else:
                         self._testing = False
@@ -113,16 +121,9 @@ class CameraThread(QThread):
                         if predicted.item() == 1:
                             status = "FLAW DETECTED"
                             recommendation = "For Repair/Replacement"
-                            color = (0, 0, 255)
                         else:
                             status = "NO FLAW"
                             recommendation = "For Constant Monitoring"
-                            color = (0, 255, 0)
-                        
-                        cv2.putText(processed_frame, status, (20, 40), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
-                        cv2.putText(processed_frame, recommendation, (20, 80), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 1, cv2.LINE_AA)
                         
                         self.status_signal.emit(status, recommendation)
                         self.test_complete_signal.emit(frame, status, recommendation)
@@ -352,7 +353,6 @@ class App(QMainWindow):
 
     def connect_signals(self):
         self.start_btn.clicked.connect(self.start_test)
-        self.save_btn.clicked.connect(self.save_results)
 
     def trigger_animation(self):
         self.status_animation.start()
@@ -384,10 +384,17 @@ class App(QMainWindow):
                     padding: 10px 0;
                 }
             """)
+            # Set camera border to red
+            self.camera_label.setStyleSheet("""
+                QLabel {
+                    background: black;
+                    border: 4px solid red;
+                }
+            """)
         else:
             self.status_indicator.setStyleSheet("""
                 QLabel {
-                    color: black;
+                    color: green;
                     font-family: 'Montserrat ExtraBold';
                     font-size: 18px;
                     padding: 15px 0;
@@ -395,10 +402,17 @@ class App(QMainWindow):
             """)
             self.recommendation_indicator.setStyleSheet("""
                 QLabel {
-                    color: black;
+                    color: green;
                     font-family: 'Montserrat';
                     font-size: 14px;
                     padding: 10px 0;
+                }
+            """)
+            # Set camera border to green
+            self.camera_label.setStyleSheet("""
+                QLabel {
+                    background: black;
+                    border: 4px solid green;
                 }
             """)
         
@@ -413,8 +427,24 @@ class App(QMainWindow):
             anim.setStartValue(self.countdown_label.geometry())
             anim.setEndValue(self.countdown_label.geometry().adjusted(0, -5, 0, -5))
             anim.start()
+        elif count == -1:
+            self.countdown_label.setText("IMAGE CAPTURED")
+            self.countdown_label.setStyleSheet("""
+                QLabel {
+                    color: #666;
+                    font-family: 'Montserrat';
+                    font-size: 14px;
+                }
+            """)
         else:
             self.countdown_label.setText("")
+            self.countdown_label.setStyleSheet("""
+                QLabel {
+                    color: red;
+                    font-family: 'Montserrat ExtraBold';
+                    font-size: 36px;
+                }
+            """)
 
     def start_test(self):
         self.start_btn.setEnabled(False)
@@ -437,7 +467,54 @@ class App(QMainWindow):
                 padding: 10px 0;
             }
         """)
+        # Reset camera border during analysis
+        self.camera_label.setStyleSheet("""
+            QLabel {
+                background: black;
+                border: none;
+            }
+        """)
         self.camera_thread.start_test()
+
+    def reset_app(self):
+        self.start_btn.setText("START INSPECTION")
+        self.start_btn.setEnabled(True)
+        self.save_btn.setEnabled(False)
+        self.status_indicator.setText("READY")
+        self.recommendation_indicator.setText("Press Start to begin")
+        self.countdown_label.setText("")
+        self.status_indicator.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 18px;
+                padding: 15px 0;
+            }
+        """)
+        self.recommendation_indicator.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-family: 'Montserrat';
+                font-size: 14px;
+                padding: 10px 0;
+            }
+        """)
+        self.countdown_label.setStyleSheet("""
+            QLabel {
+                color: red;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 36px;
+            }
+        """)
+        # Reset camera border to default
+        self.camera_label.setStyleSheet("""
+            QLabel {
+                background: black;
+                border: none;
+            }
+        """)
+        self.start_btn.disconnect()
+        self.start_btn.clicked.connect(self.start_test)
 
     def handle_test_complete(self, image, status, recommendation):
         self.test_image = image
@@ -445,6 +522,10 @@ class App(QMainWindow):
         self.test_recommendation = recommendation
         self.save_btn.setEnabled(True)
         self.start_btn.setEnabled(True)
+        self.start_btn.setText("RESET")
+        self.start_btn.disconnect()
+        self.start_btn.clicked.connect(self.reset_app)
+        self.save_btn.clicked.connect(self.save_results)
 
     def save_results(self):
         msg = QMessageBox()
