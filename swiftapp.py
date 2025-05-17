@@ -39,9 +39,9 @@ class ANNModel(nn.Module):
 class CameraThread(QThread):
     change_pixmap_signal = pyqtSignal(QImage)
     status_signal = pyqtSignal(str, str)
-    countdown_signal = pyqtSignal(int)
     test_complete_signal = pyqtSignal(np.ndarray, str, str)
     animation_signal = pyqtSignal()
+    enable_buttons_signal = pyqtSignal(bool)
 
     def __init__(self):
         super().__init__()
@@ -52,6 +52,8 @@ class CameraThread(QThread):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.last_frame = None
         self.load_model()
+        self.countdown_timer = QTimer()
+        self.countdown_timer.timeout.connect(self.update_countdown)
 
     def load_model(self):
         input_size = 2019
@@ -75,7 +77,38 @@ class CameraThread(QThread):
 
     def start_test(self):
         self._testing = True
-        self._countdown = 3  # Changed to 3 to match the countdown sequence
+        self._countdown = 3
+        self.enable_buttons_signal.emit(False)  # Disable buttons during countdown
+        self.countdown_timer.start(1000)  # Start countdown timer with 1-second interval
+
+    def update_countdown(self):
+        if self._countdown > 0:
+            self._countdown -= 1
+        elif self._countdown == 0:
+            self._countdown = -1
+            self.countdown_timer.stop()
+            self.process_captured_image()
+
+    def process_captured_image(self):
+        if self.last_frame is not None:
+            features = self.preprocess_image(self.last_frame)
+            features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self.device)
+            
+            with torch.no_grad():
+                outputs = self.model(features_tensor)
+                _, predicted = torch.max(outputs, 1)
+            
+            if predicted.item() == 1:
+                status = "FLAW DETECTED"
+                recommendation = "For Repair/Replacement"
+            else:
+                status = "NO FLAW"
+                recommendation = "For Constant Monitoring"
+            
+            self.status_signal.emit(status, recommendation)
+            self.test_complete_signal.emit(self.last_frame, status, recommendation)
+            self.animation_signal.emit()
+            self.enable_buttons_signal.emit(True)  # Re-enable buttons after processing
 
     def run(self):
         cap = cv2.VideoCapture(self.gstreamer_pipeline(), cv2.CAP_GSTREAMER)
@@ -85,7 +118,7 @@ class CameraThread(QThread):
                 self.status_signal.emit("Error", "Cannot access camera")
                 return
 
-        self.status_signal.emit("Ready", "Press Start to begin")
+        self.status_signal.emit("Ready", "")
 
         while self._run_flag:
             ret, frame = cap.read()
@@ -93,41 +126,15 @@ class CameraThread(QThread):
                 self.last_frame = frame.copy()
                 processed_frame = frame.copy()
                 
-                if self._testing:
+                if self._testing and self._countdown >= 0:
                     if self._countdown > 0:
-                        # Emit countdown signal first before processing frame
-                        self.countdown_signal.emit(self._countdown)
                         cv2.putText(processed_frame, f"{self._countdown}", 
                                     (processed_frame.shape[1]//2 - 20, processed_frame.shape[0]//2 + 20), 
                                     cv2.FONT_HERSHEY_DUPLEX, 1.5, (255, 0, 0), 4, cv2.LINE_AA)
-                        self._countdown -= 1
-                        time.sleep(1)  # Consistent 1-second delay
                     elif self._countdown == 0:
-                        self.countdown_signal.emit(-1)  # Signal for "IMAGE CAPTURED"
                         cv2.putText(processed_frame, "IMAGE CAPTURED", 
                                     (processed_frame.shape[1]//2 - 120, processed_frame.shape[0]//2 + 20), 
                                     cv2.FONT_HERSHEY_DUPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
-                        self._countdown = -1
-                        time.sleep(1)
-                    else:
-                        self._testing = False
-                        features = self.preprocess_image(frame)
-                        features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self.device)
-                        
-                        with torch.no_grad():
-                            outputs = self.model(features_tensor)
-                            _, predicted = torch.max(outputs, 1)
-                        
-                        if predicted.item() == 1:
-                            status = "FLAW DETECTED"
-                            recommendation = "For Repair/Replacement"
-                        else:
-                            status = "NO FLAW"
-                            recommendation = "For Constant Monitoring"
-                        
-                        self.status_signal.emit(status, recommendation)
-                        self.test_complete_signal.emit(frame, status, recommendation)
-                        self.animation_signal.emit()
                 
                 rgb_image = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
                 h, w, ch = rgb_image.shape
@@ -139,6 +146,7 @@ class CameraThread(QThread):
 
     def stop(self):
         self._run_flag = False
+        self.countdown_timer.stop()
         self.wait()
 
     def gstreamer_pipeline(self):
@@ -237,7 +245,7 @@ class App(QMainWindow):
             }
         """)
         
-        self.recommendation_indicator = QLabel("Press Start to begin")
+        self.recommendation_indicator = QLabel()
         self.recommendation_indicator.setAlignment(Qt.AlignCenter)
         self.recommendation_indicator.setStyleSheet("""
             QLabel {
@@ -248,21 +256,10 @@ class App(QMainWindow):
             }
         """)
         
-        self.countdown_label = QLabel()
-        self.countdown_label.setAlignment(Qt.AlignCenter)
-        self.countdown_label.setStyleSheet("""
-            QLabel {
-                color: red;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 36px;
-            }
-        """)
-        
         self.status_layout.addWidget(self.logo_space)
         self.status_layout.addWidget(self.status_title)
         self.status_layout.addWidget(self.status_indicator)
         self.status_layout.addWidget(self.recommendation_indicator)
-        self.status_layout.addWidget(self.countdown_label)
         self.status_panel.setLayout(self.status_layout)
         
         # Button Panel
@@ -346,13 +343,17 @@ class App(QMainWindow):
         self.camera_thread = CameraThread()
         self.camera_thread.change_pixmap_signal.connect(self.update_image)
         self.camera_thread.status_signal.connect(self.update_status)
-        self.camera_thread.countdown_signal.connect(self.update_countdown)
         self.camera_thread.test_complete_signal.connect(self.handle_test_complete)
         self.camera_thread.animation_signal.connect(self.trigger_animation)
+        self.camera_thread.enable_buttons_signal.connect(self.set_buttons_enabled)
         self.camera_thread.start()
 
     def connect_signals(self):
         self.start_btn.clicked.connect(self.start_test)
+
+    def set_buttons_enabled(self, enabled):
+        self.start_btn.setEnabled(enabled)
+        self.save_btn.setEnabled(enabled and self.save_btn.isEnabled())  # Preserve save button state
 
     def trigger_animation(self):
         self.status_animation.start()
@@ -418,53 +419,14 @@ class App(QMainWindow):
         
         self.trigger_animation()
 
-    def update_countdown(self, count):
-        if count > 0:
-            self.countdown_label.setText(f"{count}")
-            anim = QPropertyAnimation(self.countdown_label, b"geometry")
-            anim.setDuration(200)
-            anim.setEasingCurve(QEasingCurve.OutBack)
-            anim.setStartValue(self.countdown_label.geometry())
-            anim.setEndValue(self.countdown_label.geometry().adjusted(0, -5, 0, -5))
-            anim.start()
-        elif count == -1:
-            self.countdown_label.setText("IMAGE CAPTURED")
-            self.countdown_label.setStyleSheet("""
-                QLabel {
-                    color: #666;
-                    font-family: 'Montserrat';
-                    font-size: 14px;
-                }
-            """)
-        else:
-            self.countdown_label.setText("")
-            self.countdown_label.setStyleSheet("""
-                QLabel {
-                    color: red;
-                    font-family: 'Montserrat ExtraBold';
-                    font-size: 36px;
-                }
-            """)
-
     def start_test(self):
-        self.start_btn.setEnabled(False)
-        self.save_btn.setEnabled(False)
         self.status_indicator.setText("ANALYZING...")
-        self.recommendation_indicator.setText("Processing wheel image")
         self.status_indicator.setStyleSheet("""
             QLabel {
                 color: black;
                 font-family: 'Montserrat ExtraBold';
                 font-size: 18px;
                 padding: 15px 0;
-            }
-        """)
-        self.recommendation_indicator.setStyleSheet("""
-            QLabel {
-                color: black;
-                font-family: 'Montserrat';
-                font-size: 14px;
-                padding: 10px 0;
             }
         """)
         # Reset camera border during analysis
@@ -481,8 +443,7 @@ class App(QMainWindow):
         self.start_btn.setEnabled(True)
         self.save_btn.setEnabled(False)
         self.status_indicator.setText("READY")
-        self.recommendation_indicator.setText("Press Start to begin")
-        self.countdown_label.setText("")
+        self.recommendation_indicator.setText("")
         self.status_indicator.setStyleSheet("""
             QLabel {
                 color: black;
@@ -497,13 +458,6 @@ class App(QMainWindow):
                 font-family: 'Montserrat';
                 font-size: 14px;
                 padding: 10px 0;
-            }
-        """)
-        self.countdown_label.setStyleSheet("""
-            QLabel {
-                color: red;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 36px;
             }
         """)
         # Reset camera border to default
@@ -521,7 +475,6 @@ class App(QMainWindow):
         self.test_status = status
         self.test_recommendation = recommendation
         self.save_btn.setEnabled(True)
-        self.start_btn.setEnabled(True)
         self.start_btn.setText("RESET")
         self.start_btn.disconnect()
         self.start_btn.clicked.connect(self.reset_app)
