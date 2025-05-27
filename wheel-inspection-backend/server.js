@@ -6,102 +6,133 @@ const bodyParser = require('body-parser');
 const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
+const crypto = require('crypto');
 
 const app = express();
 
+// Middleware
 app.use(cors());
 app.use(bodyParser.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/wheel_inspection';  
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://pdTeam39:t39@cluster0.khfnesv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
-// Connect to MongoDB (either local or Atlas)
-mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => {
-    console.error('MongoDB connection error:', err);
-    process.exit(1);  // Exit the process if MongoDB connection fails
-  });
+// Connect to MongoDB
+mongoose.connect(MONGODB_URI, { 
+  useNewUrlParser: true, 
+  useUnifiedTopology: true,
+  dbName: 'wheel_inspection' // Specify your database name
+})
+.then(() => console.log('Connected to MongoDB'))
+.catch(err => {
+  console.error('MongoDB connection error:', err);
+  process.exit(1);
+});
+
+// Configure storage for uploaded images
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, 'uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(4).toString('hex');
+    cb(null, uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'), false);
+    }
+  }
+});
 
 // Define Report schema and model
 const reportSchema = new mongoose.Schema({
-  timestamp: { type: Date, required: true },
-  status: { type: String, required: true },
-  recommendation: { type: String, default: '' },
+  timestamp: { type: Date, default: Date.now },
+  status: { type: String, required: true, enum: ['NO FLAW', 'FLAW DETECTED'] },
+  recommendation: { type: String },
   image_path: { type: String, required: true },
-  name: { type: String, default: 'Untitled Report' },
+  name: { type: String },
+  trainNumber: { type: String, required: true },
+  compartmentNumber: { type: String, required: true },
+  wheelNumber: { type: String, required: true }
+});
+
+// Auto-set recommendation based on status
+reportSchema.pre('save', function(next) {
+  this.recommendation = this.status === 'FLAW DETECTED' 
+    ? 'For Repair/Replacement' 
+    : 'For Constant Monitoring';
+  this.name = `Flaw Inspection T${this.trainNumber}-C${this.compartmentNumber}-W${this.wheelNumber}`;
+  next();
 });
 
 const Report = mongoose.model('Report', reportSchema);
 
 // WebSocket server
-const server = app.listen(PORT, () => {
-  console.log(`Backend server running on port ${PORT}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
 });
 
-// Initialize WebSocket server
 const wss = new WebSocket.Server({ server });
 wss.on('connection', (ws) => {
   console.log('New WebSocket client connected');
   ws.on('close', () => console.log('WebSocket client disconnected'));
 });
 
-// WebSocket message handling - Broadcasting new reports
 const broadcastNewReport = (report) => {
-  const message = JSON.stringify({ type: 'new_report', data: report });
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
+      client.send(JSON.stringify({ type: 'new_report', data: report }));
     }
   });
 };
 
 // API routes
-
-// Test route to check if backend is working
 app.get('/test', (req, res) => {
   res.send('Backend is working!');
 });
-
-// Create new report (POST)
-app.post('/api/reports', async (req, res) => {
+ 
+app.post('/api/reports', upload.single('image'), async (req, res) => {
   try {
-    // Automatically generate the timestamp
-    const timestamp = new Date().toISOString();  // Get current date and time in ISO format
+    const { trainNumber, compartmentNumber, wheelNumber, status } = req.body;
     
-    // Set report name based on timestamp
-    const reportName = `Inspection ${timestamp}`;
+    if (!trainNumber || !compartmentNumber || !wheelNumber || !req.file) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'Missing required fields or image' });
+    }
 
-    // Automatically generate image path (you could modify this based on your actual image saving logic)
-    const imagePath = `uploads/${reportName.replace(/[:.]/g, '-')}.jpg`;
+    const report = new Report({
+      trainNumber,
+      compartmentNumber,
+      wheelNumber,
+      status: status || 'NO FLAW',
+      image_path: `/uploads/${req.file.filename}`
+    });
 
-    // Generate the status based on whether the image is flawed or not
-    const status = req.body.status || 'NO FLAW';  // You might update this later based on your image analysis logic
-    const recommendation = status === 'FLAW DETECTED' ? 'For Repair/Replacement' : 'For Constant Monitoring';
-
-    // Create the new report with the generated data
-    const reportData = {
-      timestamp: new Date(),
-      status,
-      recommendation,
-      image_path: imagePath,
-      name: reportName
-    };
-
-    const report = new Report(reportData);
     await report.save();
-
-    // Broadcast the new report to all connected WebSocket clients
     broadcastNewReport(report);
-
-    // Respond with the created report
+    
     res.status(201).json(report);
   } catch (err) {
+    if (req.file) fs.unlinkSync(req.file.path);
     res.status(400).json({ error: err.message });
   }
 });
 
-// Get all reports (GET)
 app.get('/api/reports', async (req, res) => {
   try {
     const reports = await Report.find().sort({ timestamp: -1 });
@@ -111,7 +142,6 @@ app.get('/api/reports', async (req, res) => {
   }
 });
 
-// Get report by ID (GET)
 app.get('/api/reports/:id', async (req, res) => {
   try {
     const report = await Report.findById(req.params.id);
@@ -122,10 +152,12 @@ app.get('/api/reports/:id', async (req, res) => {
   }
 });
 
-// Update report by ID (PUT)
 app.put('/api/reports/:id', async (req, res) => {
   try {
-    const report = await Report.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const report = await Report.findByIdAndUpdate(req.params.id, req.body, { 
+      new: true,
+      runValidators: true 
+    });
     if (!report) return res.status(404).json({ error: 'Report not found' });
     res.json(report);
   } catch (err) {
@@ -133,25 +165,33 @@ app.put('/api/reports/:id', async (req, res) => {
   }
 });
 
-// Delete report by ID (DELETE)
 app.delete('/api/reports/:id', async (req, res) => {
   try {
     const report = await Report.findByIdAndDelete(req.params.id);
     if (!report) return res.status(404).json({ error: 'Report not found' });
+    
+    const imagePath = path.join(__dirname, report.image_path.replace('/uploads/', 'uploads/'));
+    if (fs.existsSync(imagePath)) {
+      fs.unlinkSync(imagePath);
+    }
+    
     res.json({ message: 'Report deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Gracefully shut down the server
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ error: 'File upload error: ' + err.message });
+  }
+  res.status(500).json({ error: err.message });
+});
+
 process.on('SIGINT', () => {
-  console.log('Shutting down WebSocket server...');
   wss.close(() => {
-    console.log('WebSocket server closed');
     server.close(() => {
-      console.log('HTTP server closed');
-      process.exit(0);  // Exit the process after closing servers
+      process.exit(0);
     });
   });
 });
