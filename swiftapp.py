@@ -200,6 +200,7 @@ class CameraThread(QThread):
 
     def start_test(self):
         self.diameter_btn.setEnabled(False)
+        
         self.status_indicator.setText("ANALYZING...")
         self.status_indicator.setStyleSheet("""
             QLabel {
@@ -659,6 +660,41 @@ class App(QMainWindow):
         self.button_layout.setContentsMargins(20, 20, 20, 20)
         
         self.start_btn = QPushButton("START INSPECTION")
+        self.start_btn.setCursor(Qt.PointingHandCursor)
+        self.start_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e60000;
+                color: white;
+                border: none;
+                padding: 12px;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 14px;
+                border-radius: 4px;
+            }
+            QPushButton:hover { background-color: #cc0000; }
+            QPushButton:pressed { background-color: #b30000; }
+        """)
+
+        self.diameter_btn = QPushButton("MEASURE DIAMETER")
+        self.diameter_btn.setEnabled(False)
+        self.diameter_btn.setCursor(Qt.PointingHandCursor)
+        self.diameter_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #333;
+                color: white;
+                border: none;
+                padding: 12px;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 14px;
+                border-radius: 4px;
+            }
+            QPushButton:disabled {
+                background-color: #888;
+                color: #ccc;
+            }
+            QPushButton:hover { background-color: #111; }
+            QPushButton:pressed { background-color: #000; }
+        """)
         self.diameter_btn = QPushButton("MEASURE DIAMETER")
         self.diameter_btn.setCursor(Qt.PointingHandCursor)
         self.diameter_btn.setStyleSheet("""
@@ -691,6 +727,7 @@ class App(QMainWindow):
         """)
         
         self.save_btn = QPushButton("SAVE RESULTS")
+        self.save_btn.setEnabled(False)
         self.save_btn.setCursor(Qt.PointingHandCursor)
         self.save_btn.setEnabled(False)
         self.save_btn.setStyleSheet("""
@@ -708,8 +745,9 @@ class App(QMainWindow):
             QPushButton:disabled { background-color: #ccc; color: #666; }
         """)
         
-        self.button_layout.addWidget(self.diameter_btn)
         self.button_layout.addWidget(self.start_btn)
+        self.button_layout.addWidget(self.diameter_btn)
+        self.button_layout.addWidget(self.save_btn)
         self.button_layout.addWidget(self.save_btn)
         self.button_panel.setLayout(self.button_layout)
         
@@ -770,6 +808,11 @@ class App(QMainWindow):
 
     def update_distance(self, distance):
         self.current_distance = distance
+        self.diameter_label.setText(f"Wheel Diameter: {distance} mm")
+        self.diameter_label.show()
+        if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
+            self.save_btn.setEnabled(True)
+            self.current_distance = distance
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
             self.save_btn.setEnabled(True)
             self.diameter_label.setText(f"Wheel Diameter: {distance} mm")
@@ -901,6 +944,7 @@ class App(QMainWindow):
 
     def start_test(self):
         self.diameter_btn.setEnabled(False)
+        
         self.status_indicator.setText("ANALYZING...")
         self.status_indicator.setStyleSheet("""
             QLabel {
@@ -944,7 +988,7 @@ class App(QMainWindow):
 
     
     def measure_diameter(self):
-        self.diameter_btn.setEnabled(False)
+        
         self.distance_sensor_thread = DistanceSensorThread()
         self.distance_sensor_thread.distance_measured.connect(self.update_distance)
         self.distance_sensor_thread.start()
@@ -985,6 +1029,8 @@ class App(QMainWindow):
 
     def handle_test_complete(self, image, status, recommendation):
         self.test_image = image
+        self.test_status = status
+        self.test_recommendation = recommendation
         self.test_status = status
         self.test_recommendation = recommendation
         self.diameter_btn.setEnabled(True)
