@@ -61,49 +61,43 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, note
         if os.path.exists(temp_img_path):
             os.remove(temp_img_path)
 
+
+
+
 class DistanceSensorThread(QThread):
     distance_measured = pyqtSignal(int)
     measurement_complete = pyqtSignal()
+    error_occurred = pyqtSignal(str)
 
-    def __init__(self):
+    def __init__(self, tof):
         super().__init__()
         self._run_flag = True
-        self.tof = None
+        self.tof = tof
 
     def run(self):
-        if VL53L0X is None:
-            # Simulate measurement
-            self.distance_measured.emit(680)
-            time.sleep(1.0)
-            self.measurement_complete.emit()
-            return
-
         try:
-            self.tof = VL53L0X.VL53L0X()
-            self.tof.open()
-            self.tof.start_ranging(VL53L0X.Vl53l0xAccuracyMode.GOOD)
-            
-            # Take measurement for 1 second
             start_time = time.time()
             while time.time() - start_time < 1.0 and self._run_flag:
                 distance = self.tof.get_distance()
                 if distance > 0:
                     self.distance_measured.emit(distance)
-                time.sleep(0.05)  # 20Hz measurement rate
-            
-            self.measurement_complete.emit()
+                time.sleep(0.05)
         except Exception as e:
-            print(f"Error with distance sensor: {e}")
-            self.distance_measured.emit(680)
-            self.measurement_complete.emit()
+            self.error_occurred.emit(str(e))
         finally:
-            if self.tof is not None:
+            try:
                 self.tof.stop_ranging()
                 self.tof.close()
+            except Exception as e:
+                print(f"Sensor cleanup error: {e}")
+            self.measurement_complete.emit()
 
     def stop(self):
         self._run_flag = False
         self.wait()
+
+
+
 
 class ANNModel(nn.Module):
     def __init__(self, input_size):
@@ -218,40 +212,45 @@ class CameraThread(QThread):
         finally:
             self.enable_buttons_signal.emit(True)
 
+    
     def run(self):
         # Optimized GStreamer pipeline for Jetson Nano at 20 FPS
         pipeline = (
             "nvarguscamerasrc ! "
             "video/x-raw(memory:NVMM), width=640, height=480, "
-            "format=NV12, framerate=20/1 ! "  # Reduced to 20 FPS
+            "format=NV12, framerate=20/1 ! "
             "nvvidconv flip-method=0 ! "
             "video/x-raw, width=480, height=360, format=BGRx ! "
             "videoconvert ! "
             "video/x-raw, format=BGR ! appsink drop=1"
         )
-        
+
         cap = None
         try:
             cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
-            
             if not cap.isOpened():
-                print("Failed to open with GStreamer, trying default camera")
+                print("GStreamer camera failed. Restarting nvargus-daemon...")
+                os.system("sudo systemctl restart nvargus-daemon")
+                time.sleep(1.0)
+                cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+
+            if not cap.isOpened():
+                print("Falling back to USB camera...")
                 cap = cv2.VideoCapture(0)
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 480)
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-                cap.set(cv2.CAP_PROP_FPS, 20)  # Reduced to 20 FPS
-                
+                cap.set(cv2.CAP_PROP_FPS, 20)
+
             if not cap.isOpened():
-                self.status_signal.emit("Error", "Cannot access camera")
+                print("Error: Cannot access any camera")
                 return
 
-            self.status_signal.emit("Ready", "")
+            print("Camera Ready")
 
             while self._run_flag:
                 ret, frame = cap.read()
                 if ret:
                     self.last_frame = frame.copy()
-                    
                     rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     h, w, ch = rgb_image.shape
                     bytes_per_line = ch * w
@@ -260,7 +259,7 @@ class CameraThread(QThread):
 
         except Exception as e:
             print(f"Camera error: {e}")
-            self.status_signal.emit("Error", "Camera error")
+            print("Camera error")
         finally:
             if cap is not None:
                 cap.release()
@@ -273,8 +272,8 @@ class App(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Wheel Inspection")
-        self.setWindowIcon(QIcon("icon.png"))
-        self.setFixedSize(800, 480)
+        self.setWindowIcon(QIcon("logo.png"))
+        self.showFullScreen()
             
         self.trainNumber = 1
         self.compartmentNumber = 1
@@ -322,7 +321,7 @@ class App(QMainWindow):
         self.status_panel = QFrame()
         self.status_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.status_layout = QVBoxLayout()
-        self.status_layout.setContentsMargins(10, 10, 10, 10)
+        self.status_layout.setContentsMargins(5, 5, 5, 5)
         
         # Logo
         self.logo_space = QLabel()
@@ -604,8 +603,8 @@ class App(QMainWindow):
         self.button_panel = QFrame()
         self.button_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.button_layout = QVBoxLayout()
-        self.button_layout.setContentsMargins(20, 20, 20, 20)
-        self.button_layout.setSpacing(15)
+        self.button_layout.setContentsMargins(10, 10, 10, 10)
+        self.button_layout.setSpacing(8)
         
         # 1. Detect Flaws Button
         self.detect_btn = QPushButton("DETECT FLAWS")
@@ -670,6 +669,29 @@ class App(QMainWindow):
         
         self.button_layout.addWidget(self.detect_btn)
         self.button_layout.addWidget(self.measure_btn)
+        self.save_btn.setVisible(False)
+        self.button_layout.addWidget(self.save_btn)
+        
+        # 4. Reset Button
+        self.reset_btn = QPushButton("RESET")
+        self.reset_btn.setVisible(False)
+        self.reset_btn.setCursor(Qt.PointingHandCursor)
+        self.reset_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #444;
+                color: white;
+                border: none;
+                padding: 12px;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 14px;
+                border-radius: 4px;
+            }
+            QPushButton:hover { background-color: #222; }
+            QPushButton:pressed { background-color: #111; }
+        """)
+        self.button_layout.addWidget(self.reset_btn)
+
+        self.button_layout.addWidget(self.reset_btn)
         self.button_layout.addWidget(self.save_btn)
         self.button_panel.setLayout(self.button_layout)
         
@@ -732,6 +754,10 @@ class App(QMainWindow):
     def update_distance(self, distance):
         self.current_distance = distance
         self.diameter_label.setText(f"Wheel Diameter: {distance} mm")
+        self.detect_btn.setVisible(False)
+        self.measure_btn.setVisible(False)
+        self.reset_btn.setVisible(True)
+        self.save_btn.setVisible(True)
         self.diameter_label.show()
         self.measure_btn.setEnabled(True)  # Re-enable measure button after measurement
         self.save_btn.setEnabled(True)  # Enable save button after measurement
@@ -740,6 +766,7 @@ class App(QMainWindow):
         self.detect_btn.clicked.connect(self.detect_flaws)
         self.measure_btn.clicked.connect(self.measure_diameter)
         self.save_btn.clicked.connect(self.save_report)
+        self.reset_btn.clicked.connect(self.reset_ui)
 
     def set_buttons_enabled(self, enabled):
         # Only enable measure button if we have a test result
@@ -766,7 +793,7 @@ class App(QMainWindow):
     def update_status(self, status, recommendation):
         if status in ["FLAW DETECTED", "NO FLAW"]:
             if hasattr(self, 'current_distance'):
-                self.diameter_label.setText(f"Wheel Diameter: {self.current_distance} mm")
+                self.diameter_label.setText("Wheel Diameter: Measure Next")
             else:
                 self.diameter_label.setText("Wheel Diameter: -")
             self.diameter_label.show()
@@ -901,18 +928,26 @@ class App(QMainWindow):
         self.status_indicator.setText("MEASURING DIAMETER...")
         self.diameter_label.setText("Measuring...")
         self.diameter_label.show()
-        
-        # Disable buttons during measurement
+
         self.detect_btn.setEnabled(False)
         self.measure_btn.setEnabled(False)
         self.save_btn.setEnabled(False)
-        
-        # Initialize and start distance sensor
-        self.sensor_thread = DistanceSensorThread()
-        self.sensor_thread.distance_measured.connect(self.update_distance)
-        self.sensor_thread.measurement_complete.connect(self.on_measurement_complete)
-        self.sensor_thread.error_occurred.connect(self.on_measurement_error)
-        self.sensor_thread.start()
+
+        try:
+            self.tof = VL53L0X.VL53L0X()
+            self.tof.open()
+            time.sleep(0.1)
+            self.tof.start_ranging(VL53L0X.Vl53l0xAccuracyMode.GOOD)
+
+            self.sensor_thread = DistanceSensorThread(self.tof)
+            self.sensor_thread.distance_measured.connect(self.update_distance)
+            self.sensor_thread.measurement_complete.connect(self.on_measurement_complete)
+            self.sensor_thread.error_occurred.connect(self.on_measurement_error)
+            self.sensor_thread.start()
+
+        except Exception as e:
+            print(f"Sensor init error: {e}")
+            self.on_measurement_error("Sensor init error")
 
     def on_measurement_error(self, error_msg):
         print(f"Measurement error: {error_msg}")
@@ -923,10 +958,14 @@ class App(QMainWindow):
     def update_distance(self, distance):
         self.current_distance = distance
         self.diameter_label.setText(f"Wheel Diameter: {distance} mm")
+        self.detect_btn.setVisible(False)
+        self.measure_btn.setVisible(False)
+        self.reset_btn.setVisible(True)
+        self.save_btn.setVisible(True)
 
     def on_measurement_complete(self):
         # Re-enable buttons
-        self.detect_btn.setEnabled(True)
+        # self.detect_btn.setEnabled(False)  # Removed from reset to allow re-detect
         self.measure_btn.setEnabled(True)
         
         # Only enable save if we have both test result and measurement
@@ -1021,6 +1060,30 @@ class App(QMainWindow):
         
         # Reset buttons
         self.detect_btn.setEnabled(True)
+        self.detect_btn.setVisible(True)
+        self.measure_btn.setEnabled(False)
+        self.measure_btn.setVisible(True)
+        self.save_btn.setEnabled(False)
+        self.save_btn.setVisible(False)
+        self.reset_btn.setVisible(False)
+
+        self.detect_btn.setEnabled(True)
+        self.detect_btn.setVisible(True)
+        self.measure_btn.setEnabled(False)
+        self.measure_btn.setVisible(True)
+        self.save_btn.setEnabled(False)
+        self.save_btn.setVisible(False)
+        self.reset_btn.setVisible(False)
+
+        self.detect_btn.setEnabled(True)
+        self.detect_btn.setVisible(True)
+        self.measure_btn.setEnabled(False)
+        self.measure_btn.setVisible(True)
+        self.save_btn.setEnabled(False)
+        self.save_btn.setVisible(True)
+        self.reset_btn.setVisible(False)
+
+        # self.detect_btn.setEnabled(False)  # Removed from reset to allow re-detect
         self.measure_btn.setEnabled(False)
         self.save_btn.setEnabled(False)
         
@@ -1036,7 +1099,7 @@ class App(QMainWindow):
         self.test_recommendation = recommendation
         
         # Enable measure button after flaw detection
-        self.detect_btn.setEnabled(True)
+        # self.detect_btn.setEnabled(False)  # Removed from reset to allow re-detect
         self.measure_btn.setEnabled(True)
         self.save_btn.setEnabled(False)  # Still need measurement before saving
         
@@ -1073,6 +1136,30 @@ class App(QMainWindow):
         
         # Reset buttons
         self.detect_btn.setEnabled(True)
+        self.detect_btn.setVisible(True)
+        self.measure_btn.setEnabled(False)
+        self.measure_btn.setVisible(True)
+        self.save_btn.setEnabled(False)
+        self.save_btn.setVisible(False)
+        self.reset_btn.setVisible(False)
+
+        self.detect_btn.setEnabled(True)
+        self.detect_btn.setVisible(True)
+        self.measure_btn.setEnabled(False)
+        self.measure_btn.setVisible(True)
+        self.save_btn.setEnabled(False)
+        self.save_btn.setVisible(False)
+        self.reset_btn.setVisible(False)
+
+        self.detect_btn.setEnabled(True)
+        self.detect_btn.setVisible(True)
+        self.measure_btn.setEnabled(False)
+        self.measure_btn.setVisible(True)
+        self.save_btn.setEnabled(False)
+        self.save_btn.setVisible(True)
+        self.reset_btn.setVisible(False)
+
+        # self.detect_btn.setEnabled(False)  # Removed from reset to allow re-detect
         self.measure_btn.setEnabled(False)
         self.save_btn.setEnabled(False)
         
