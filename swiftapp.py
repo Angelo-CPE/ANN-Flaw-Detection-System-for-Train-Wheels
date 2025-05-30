@@ -899,6 +899,10 @@ class App(QMainWindow):
 
     def measure_diameter(self):
         self.status_indicator.setText("MEASURING DIAMETER...")
+        self.diameter_label.setText("Measuring...")
+        self.diameter_label.show()
+        
+        # Disable buttons during measurement
         self.detect_btn.setEnabled(False)
         self.measure_btn.setEnabled(False)
         self.save_btn.setEnabled(False)
@@ -907,13 +911,33 @@ class App(QMainWindow):
         self.sensor_thread = DistanceSensorThread()
         self.sensor_thread.distance_measured.connect(self.update_distance)
         self.sensor_thread.measurement_complete.connect(self.on_measurement_complete)
+        self.sensor_thread.error_occurred.connect(self.on_measurement_error)
         self.sensor_thread.start()
 
+    def on_measurement_error(self, error_msg):
+        print(f"Measurement error: {error_msg}")
+        # You could show the error to the user if desired
+        # For now, we'll just use the default value (680)
+        self.on_measurement_complete()
+
+    def update_distance(self, distance):
+        self.current_distance = distance
+        self.diameter_label.setText(f"Wheel Diameter: {distance} mm")
+
     def on_measurement_complete(self):
-        self.status_indicator.setText(self.test_status)
+        # Re-enable buttons
         self.detect_btn.setEnabled(True)
         self.measure_btn.setEnabled(True)
-        self.save_btn.setEnabled(True)
+        
+        # Only enable save if we have both test result and measurement
+        if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
+            self.save_btn.setEnabled(True)
+        
+        # Update status if we have a test result
+        if hasattr(self, 'test_status'):
+            self.status_indicator.setText(self.test_status)
+        else:
+            self.status_indicator.setText("READY")
 
     def save_report(self):
         msg = QMessageBox()
