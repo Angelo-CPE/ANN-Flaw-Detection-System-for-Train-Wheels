@@ -61,15 +61,17 @@ const upload = multer({
 
 // Define Report schema and model
 const reportSchema = new mongoose.Schema({
-  timestamp: { type: Date, default: Date.now },
-  status: { type: String, required: true, enum: ['NO FLAW', 'FLAW DETECTED'] },
-  recommendation: { type: String },
+  timestamp: { type: Date, required: true },
+  name: { type: String, default: 'Untitled Report' },
+  trainNumber: { type: Number, required: true },
+  compartmentNumber: { type: Number, required: true },
+  wheelNumber: { type: Number, required: true },
+  status: { type: String, required: true },
+  recommendation: { type: String, default: '' },
   image_path: { type: String, required: true },
-  name: { type: String },
-  trainNumber: { type: String, required: true },
-  compartmentNumber: { type: String, required: true },
-  wheelNumber: { type: String, required: true }
+  wheel_diameter: { type: Number, required: true }
 });
+
 
 // Auto-set recommendation based on status
 reportSchema.pre('save', function(next) {
@@ -108,27 +110,26 @@ app.get('/test', (req, res) => {
  
 app.post('/api/reports', upload.single('image'), async (req, res) => {
   try {
-    const { trainNumber, compartmentNumber, wheelNumber, status } = req.body;
-    
-    if (!trainNumber || !compartmentNumber || !wheelNumber || !req.file) {
-      if (req.file) fs.unlinkSync(req.file.path);
-      return res.status(400).json({ error: 'Missing required fields or image' });
-    }
+    console.log('Incoming report:', req.body);  // 👈 ADD THIS LINE
 
+    const { trainNumber, compartmentNumber, wheelNumber, status, image_path, recommendation, name, notes, wheel_diameter } = req.body;
     const report = new Report({
+      timestamp: new Date(),
       trainNumber,
       compartmentNumber,
       wheelNumber,
-      status: status || 'NO FLAW',
-      image_path: `/uploads/${req.file.filename}`
+      status,
+      image_path,
+      recommendation,
+      name,
+      notes,
+      wheel_diameter
     });
 
     await report.save();
     broadcastNewReport(report);
-    
     res.status(201).json(report);
   } catch (err) {
-    if (req.file) fs.unlinkSync(req.file.path);
     res.status(400).json({ error: err.message });
   }
 });
