@@ -15,11 +15,16 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
 from PyQt5.QtGui import QImage, QPixmap, QFont, QColor, QPainter, QPen, QFontDatabase, QIcon
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve
 
-# Import VL53L0X library
+# VL53L0X import with error handling
+VL53L0X_AVAILABLE = False
 try:
     import VL53L0X
+    VL53L0X_AVAILABLE = True
 except ImportError:
     print("VL53L0X library not found. Distance measurement will be simulated.")
+    VL53L0X = None
+except Exception as e:
+    print(f"Error importing VL53L0X: {e}. Distance measurement will be simulated.")
     VL53L0X = None
 
 def send_report_to_backend(status, recommendation, image_base64, name=None, notes="", trainNumber=None, compartmentNumber=None, wheelNumber=None, wheel_diameter=None):
@@ -39,7 +44,7 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, note
     }
 
     try:
-        response = requests.post(backend_url, json=report)
+        response = requests.post(backend_url, json=report, timeout=5)
         if response.status_code == 201:
             print("Report sent successfully!")
         else:
@@ -54,9 +59,25 @@ class DistanceSensorThread(QThread):
         super().__init__()
         self._run_flag = True
         self.tof = None
+        self.sensor_initialized = False
+
+    def initialize_sensor(self):
+        if not VL53L0X_AVAILABLE:
+            return False
+            
+        try:
+            self.tof = VL53L0X.VL53L0X()
+            self.tof.open()
+            self.tof.start_ranging(VL53L0X.Vl53l0xAccuracyMode.GOOD)
+            self.sensor_initialized = True
+            return True
+        except Exception as e:
+            print(f"Error initializing distance sensor: {e}")
+            self.sensor_initialized = False
+            return False
 
     def run(self):
-        if VL53L0X is None:
+        if not self.initialize_sensor():
             # Simulate distance measurement if sensor is not available
             while self._run_flag:
                 simulated_distance = 680  # Default simulated value
@@ -65,10 +86,6 @@ class DistanceSensorThread(QThread):
             return
 
         try:
-            self.tof = VL53L0X.VL53L0X()
-            self.tof.open()
-            self.tof.start_ranging(VL53L0X.Vl53l0xAccuracyMode.GOOD)
-
             while self._run_flag:
                 distance = self.tof.get_distance()
                 if distance > 0:  # Only emit valid measurements
@@ -81,13 +98,15 @@ class DistanceSensorThread(QThread):
             self.distance_measured.emit(680)
         finally:
             if self.tof is not None:
-                self.tof.stop_ranging()
-                self.tof.close()
+                try:
+                    self.tof.stop_ranging()
+                    self.tof.close()
+                except:
+                    pass
 
     def stop(self):
         self._run_flag = False
         self.wait()
-
 
 class ANNModel(nn.Module):
     def __init__(self, input_size):
@@ -107,7 +126,6 @@ class ANNModel(nn.Module):
         x = torch.relu(self.fc3(x))
         x = self.fc4(x)
         return x
-
 
 class CameraThread(QThread):
     change_pixmap_signal = pyqtSignal(QImage)
@@ -129,26 +147,41 @@ class CameraThread(QThread):
         self.countdown_timer.timeout.connect(self.update_countdown)
 
     def load_model(self):
-        input_size = 2019
-        self.model = ANNModel(input_size=input_size).to(self.device)
-        model_path = 'ANN_model.pth'
-        self.model.load_state_dict(torch.load(model_path, map_location=self.device))
-        self.model.eval()
+        try:
+            input_size = 2019
+            self.model = ANNModel(input_size=input_size).to(self.device)
+            model_path = 'ANN_model.pth'
+            if os.path.exists(model_path):
+                self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+                self.model.eval()
+            else:
+                raise FileNotFoundError(f"Model file not found at {model_path}")
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            self.model = None
 
     def preprocess_image(self, frame):
-        frame_gray = cv2.cvtColor(cv2.resize(frame, (128, 128)), cv2.COLOR_BGR2GRAY)
-        hog_features = hog(frame_gray, pixels_per_cell=(16, 16), cells_per_block=(2, 2), visualize=False)
-        signal = np.mean(frame_gray, axis=0)
-        analytic_signal = hilbert(signal)
-        amplitude_envelope = np.abs(analytic_signal)
-        phase = np.unwrap(np.angle(analytic_signal))
-        frequency = np.pad(np.diff(phase) / (2.0 * np.pi), (0, 1), mode='constant')
-        combined_features = np.concatenate([hog_features, amplitude_envelope, frequency])
-        if len(combined_features) != 2019:
-            combined_features = np.resize(combined_features, 2019)
-        return combined_features
+        try:
+            frame_gray = cv2.cvtColor(cv2.resize(frame, (128, 128)), cv2.COLOR_BGR2GRAY)
+            hog_features = hog(frame_gray, pixels_per_cell=(16, 16), cells_per_block=(2, 2), visualize=False)
+            signal = np.mean(frame_gray, axis=0)
+            analytic_signal = hilbert(signal)
+            amplitude_envelope = np.abs(analytic_signal)
+            phase = np.unwrap(np.angle(analytic_signal))
+            frequency = np.pad(np.diff(phase) / (2.0 * np.pi), (0, 1), mode='constant')
+            combined_features = np.concatenate([hog_features, amplitude_envelope, frequency])
+            if len(combined_features) != 2019:
+                combined_features = np.resize(combined_features, 2019)
+            return combined_features
+        except Exception as e:
+            print(f"Error in image preprocessing: {e}")
+            return np.zeros(2019)
 
     def start_test(self):
+        if self.model is None:
+            self.status_signal.emit("Error", "Model not loaded")
+            return
+            
         self._testing = True
         self._countdown = 0.5
         self.enable_buttons_signal.emit(False)
@@ -160,7 +193,12 @@ class CameraThread(QThread):
         self.process_captured_image()
 
     def process_captured_image(self):
-        if self.last_frame is not None:
+        if self.last_frame is None or self.model is None:
+            self.status_signal.emit("Error", "No frame captured or model not loaded")
+            self.enable_buttons_signal.emit(True)
+            return
+
+        try:
             features = self.preprocess_image(self.last_frame)
             features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self.device)
             
@@ -178,36 +216,51 @@ class CameraThread(QThread):
             self.status_signal.emit(status, recommendation)
             self.test_complete_signal.emit(self.last_frame, status, recommendation)
             self.animation_signal.emit()
+        except Exception as e:
+            print(f"Error processing image: {e}")
+            self.status_signal.emit("Error", "Processing failed")
+        finally:
             self.enable_buttons_signal.emit(True)
 
     def run(self):
-        cap = cv2.VideoCapture(self.gstreamer_pipeline(), cv2.CAP_GSTREAMER)
-        if not cap.isOpened():
-            cap = cv2.VideoCapture(0)
+        cap = None
+        try:
+            pipeline = self.gstreamer_pipeline()
+            cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+            
+            if not cap.isOpened():
+                print("Failed to open with GStreamer, trying default camera")
+                cap = cv2.VideoCapture(0)
+                
             if not cap.isOpened():
                 self.status_signal.emit("Error", "Cannot access camera")
                 return
 
-        self.status_signal.emit("Ready", "")
+            self.status_signal.emit("Ready", "")
 
-        while self._run_flag:
-            ret, frame = cap.read()
-            if ret:
-                self.last_frame = frame.copy()
-                processed_frame = frame.copy()
-                
-                if self._testing and self._countdown >= 0:
-                    cv2.putText(processed_frame, "IMAGE CAPTURED", 
-                               (processed_frame.shape[1]//2 - 150, processed_frame.shape[0]//2 + 20), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
-                
-                rgb_image = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-                h, w, ch = rgb_image.shape
-                bytes_per_line = ch * w
-                qt_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
-                self.change_pixmap_signal.emit(qt_image)
+            while self._run_flag:
+                ret, frame = cap.read()
+                if ret:
+                    self.last_frame = frame.copy()
+                    processed_frame = frame.copy()
+                    
+                    if self._testing and self._countdown >= 0:
+                        cv2.putText(processed_frame, "IMAGE CAPTURED", 
+                                   (processed_frame.shape[1]//2 - 150, processed_frame.shape[0]//2 + 20), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
+                    
+                    rgb_image = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
+                    h, w, ch = rgb_image.shape
+                    bytes_per_line = ch * w
+                    qt_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+                    self.change_pixmap_signal.emit(qt_image)
 
-        cap.release()
+        except Exception as e:
+            print(f"Camera error: {e}")
+            self.status_signal.emit("Error", "Camera error")
+        finally:
+            if cap is not None:
+                cap.release()
 
     def stop(self):
         self._run_flag = False
@@ -224,7 +277,6 @@ class CameraThread(QThread):
             "videoconvert ! "
             "video/x-raw, format=BGR ! appsink"
         )
-
 
 class App(QMainWindow):
     def __init__(self):
@@ -671,11 +723,6 @@ class App(QMainWindow):
             self.camera_label.width(), self.camera_label.height(),
             Qt.KeepAspectRatio, Qt.SmoothTransformation
         ))
-
-    def update_analyzing_text(self):
-        self.analyzing_dots = (self.analyzing_dots + 1) % (self.max_dots + 1)
-        dots = "." * self.analyzing_dots
-        self.analyzing_label.setText(f"ANALYZING{dots}")
 
     def update_status(self, status, recommendation):
         if status in ["FLAW DETECTED", "NO FLAW"]:

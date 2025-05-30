@@ -63,13 +63,13 @@ const upload = multer({
 const reportSchema = new mongoose.Schema({
   timestamp: { type: Date, required: true },
   name: { type: String, default: 'Untitled Report' },
-  trainNumber: { type: Number, required: true },
-  compartmentNumber: { type: Number, required: true },
-  wheelNumber: { type: Number, required: true },
+  trainNumber: { type: String, required: true },
+  compartmentNumber: { type: String, required: true },
+  wheelNumber: { type: String, required: true },
   status: { type: String, required: true },
   recommendation: { type: String, default: '' },
   image_path: { type: String, required: true },
-  wheel_diameter: { type: Number, required: true }
+  wheel_diameter: { type: String, required: true }
 });
 
 
