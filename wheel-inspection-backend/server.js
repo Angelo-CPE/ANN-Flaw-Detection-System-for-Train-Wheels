@@ -63,9 +63,9 @@ const upload = multer({
 const reportSchema = new mongoose.Schema({
   timestamp: { type: Date, required: true },
   name: { type: String, default: 'Untitled Report' },
-  train_number: { type: Number, required: true },
-  compartment_number: { type: Number, required: true },
-  wheel_number: { type: Number, required: true },
+  trainNumber: { type: Number, required: true },
+  compartmentNumber: { type: Number, required: true },
+  wheelNumber: { type: Number, required: true },
   status: { type: String, required: true },
   recommendation: { type: String, default: '' },
   image_path: { type: String, required: true },
@@ -78,7 +78,7 @@ reportSchema.pre('save', function(next) {
   this.recommendation = this.status === 'FLAW DETECTED' 
     ? 'For Repair/Replacement' 
     : 'For Constant Monitoring';
-  this.name = `Flaw Inspection Train ${this.train_number}-C${this.compartment_number}-W${this.wheel_number}`;
+  this.name = `Flaw Inspection T${this.trainNumber}-C${this.compartmentNumber}-W${this.wheelNumber}`;
   next();
 });
 
@@ -112,12 +112,12 @@ app.post('/api/reports', upload.single('image'), async (req, res) => {
   try {
     console.log('Incoming report:', req.body);  // 👈 ADD THIS LINE
 
-    const { train_number, compartment_number, wheel_number, status, image_path, recommendation, name, notes, wheel_diameter } = req.body;
+    const { trainNumber, compartmentNumber, wheelNumber, status, image_path, recommendation, name, notes, wheel_diameter } = req.body;
     const report = new Report({
       timestamp: new Date(),
-      train_number,
-      compartment_number,
-      wheel_number,
+      trainNumber,
+      compartmentNumber,
+      wheelNumber,
       status,
       image_path,
       recommendation,

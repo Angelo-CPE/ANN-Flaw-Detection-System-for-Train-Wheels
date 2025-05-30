@@ -22,7 +22,7 @@ except ImportError:
     print("VL53L0X library not found. Distance measurement will be simulated.")
     VL53L0X = None
 
-def send_report_to_backend(status, recommendation, image_base64, name=None, notes="", train_number=None, compartment_number=None, wheel_number=None, wheel_diameter=None):
+def send_report_to_backend(status, recommendation, image_base64, name=None, notes="", trainNumber=None, compartmentNumber=None, wheelNumber=None, wheel_diameter=None):
     backend_url = "http://localhost:5000/api/reports"  # Update as needed
 
     report = {
@@ -32,9 +32,9 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, note
         "image_path": image_base64,
         "name": name,
         "notes": notes,
-        "train_number": train_number,
-        "compartment_number": compartment_number,
-        "wheel_number": wheel_number,
+        "trainNumber": trainNumber,
+        "compartmentNumber": compartmentNumber,
+        "wheelNumber": wheelNumber,
         "wheel_diameter": wheel_diameter
     }
 
@@ -233,9 +233,9 @@ class App(QMainWindow):
         self.setWindowIcon(QIcon("icon.png"))
         self.setFixedSize(800, 480)
             
-        self.train_number = 1
-        self.compartment_number = 1
-        self.wheel_number = 1
+        self.trainNumber = 1
+        self.compartmentNumber = 1
+        self.wheelNumber = 1
         self.current_distance = 0
         
         self.central_widget = QWidget()
@@ -321,9 +321,9 @@ class App(QMainWindow):
             QPushButton:hover { background-color: #e0e0e0; }
         """)
         
-        self.train_number_label = QLabel("1")
-        self.train_number_label.setAlignment(Qt.AlignCenter)
-        self.train_number_label.setStyleSheet("""
+        self.trainNumber_label = QLabel("1")
+        self.trainNumber_label.setAlignment(Qt.AlignCenter)
+        self.trainNumber_label.setStyleSheet("""
             QLabel {
                 font-family: 'Montserrat Black';
                 font-size: 16px;
@@ -377,9 +377,9 @@ class App(QMainWindow):
             QPushButton:hover { background-color: #e0e0e0; }
         """)
         
-        self.compartment_number_label = QLabel("1")
-        self.compartment_number_label.setAlignment(Qt.AlignCenter)
-        self.compartment_number_label.setStyleSheet("""
+        self.compartmentNumber_label = QLabel("1")
+        self.compartmentNumber_label.setAlignment(Qt.AlignCenter)
+        self.compartmentNumber_label.setStyleSheet("""
             QLabel {
                 font-family: 'Montserrat Black';
                 font-size: 16px;
@@ -434,9 +434,9 @@ class App(QMainWindow):
             QPushButton:hover { background-color: #e0e0e0; }
         """)
         
-        self.wheel_number_label = QLabel("1")
-        self.wheel_number_label.setAlignment(Qt.AlignCenter)
-        self.wheel_number_label.setStyleSheet("""
+        self.wheelNumber_label = QLabel("1")
+        self.wheelNumber_label.setAlignment(Qt.AlignCenter)
+        self.wheelNumber_label.setStyleSheet("""
             QLabel {
                 font-family: 'Montserrat Black';
                 font-size: 16px;
@@ -468,17 +468,17 @@ class App(QMainWindow):
         # Add to layout
         self.number_layout.addWidget(self.train_label, 0, 0)
         self.number_layout.addWidget(self.train_decrement, 0, 1)
-        self.number_layout.addWidget(self.train_number_label, 0, 2)
+        self.number_layout.addWidget(self.trainNumber_label, 0, 2)
         self.number_layout.addWidget(self.train_increment, 0, 3)
         
         self.number_layout.addWidget(self.compartment_label, 1, 0)
         self.number_layout.addWidget(self.compartment_decrement, 1, 1)
-        self.number_layout.addWidget(self.compartment_number_label, 1, 2)
+        self.number_layout.addWidget(self.compartmentNumber_label, 1, 2)
         self.number_layout.addWidget(self.compartment_increment, 1, 3)
         
         self.number_layout.addWidget(self.wheel_label, 2, 0)
         self.number_layout.addWidget(self.wheel_decrement, 2, 1)
-        self.number_layout.addWidget(self.wheel_number_label, 2, 2)
+        self.number_layout.addWidget(self.wheelNumber_label, 2, 2)
         self.number_layout.addWidget(self.wheel_increment, 2, 3)
         
         self.number_controls.setLayout(self.number_layout)
@@ -624,14 +624,14 @@ class App(QMainWindow):
 
     def update_number(self, number_type, change):
         if number_type == 'train':
-            self.train_number = max(1, min(20, self.train_number + change))
-            self.train_number_label.setText(str(self.train_number))
+            self.trainNumber = max(1, min(20, self.trainNumber + change))
+            self.trainNumber_label.setText(str(self.trainNumber))
         elif number_type == 'compartment':
-            self.compartment_number = max(1, min(8, self.compartment_number + change))
-            self.compartment_number_label.setText(str(self.compartment_number))
+            self.compartmentNumber = max(1, min(8, self.compartmentNumber + change))
+            self.compartmentNumber_label.setText(str(self.compartmentNumber))
         elif number_type == 'wheel':
-            self.wheel_number = max(1, min(8, self.wheel_number + change))
-            self.wheel_number_label.setText(str(self.wheel_number))
+            self.wheelNumber = max(1, min(8, self.wheelNumber + change))
+            self.wheelNumber_label.setText(str(self.wheelNumber))
 
     def setup_animations(self):
         self.status_animation = QPropertyAnimation(self.status_indicator, b"windowOpacity")
@@ -881,16 +881,16 @@ class App(QMainWindow):
             _, buffer = cv2.imencode('.jpg', self.test_image)
             image_base64 = base64.b64encode(buffer).decode('utf-8')
             
-            report_name = f"Train {self.train_number} - Compartment {self.compartment_number} - Wheel {self.wheel_number}"
+            report_name = f"Train {self.trainNumber} - Compartment {self.compartmentNumber} - Wheel {self.wheelNumber}"
             
             send_report_to_backend(
                 status=self.test_status,
                 recommendation=self.test_recommendation,
                 image_base64=image_base64,
                 name=report_name,
-                train_number=self.train_number,
-                compartment_number=self.compartment_number,
-                wheel_number=self.wheel_number,
+                trainNumber=self.trainNumber,
+                compartmentNumber=self.compartmentNumber,
+                wheelNumber=self.wheelNumber,
                 wheel_diameter=self.current_distance
             )
         self.save_btn.setEnabled(False)
