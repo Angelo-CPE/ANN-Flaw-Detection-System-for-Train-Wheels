@@ -199,6 +199,7 @@ class CameraThread(QThread):
             return np.zeros(2019)
 
     def start_test(self):
+        self.diameter_btn.setEnabled(False)
         self.status_indicator.setText("ANALYZING...")
         self.status_indicator.setStyleSheet("""
             QLabel {
@@ -765,9 +766,15 @@ class App(QMainWindow):
         self.distance_sensor_thread = DistanceSensorThread()
         self.distance_sensor_thread.distance_measured.connect(self.update_distance)
         self.distance_sensor_thread.start()
+        QTimer.singleShot(1000, self.distance_sensor_thread.stop)
 
     def update_distance(self, distance):
         self.current_distance = distance
+        if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
+            self.save_btn.setEnabled(True)
+            self.diameter_label.setText(f"Wheel Diameter: {distance} mm")
+            self.diameter_label.show()
+            self.current_distance = distance
 
     def connect_signals(self):
         self.diameter_btn.clicked.connect(self.measure_diameter)
@@ -893,6 +900,7 @@ class App(QMainWindow):
         self.trigger_animation()
 
     def start_test(self):
+        self.diameter_btn.setEnabled(False)
         self.status_indicator.setText("ANALYZING...")
         self.status_indicator.setStyleSheet("""
             QLabel {
@@ -936,9 +944,11 @@ class App(QMainWindow):
 
     
     def measure_diameter(self):
+        self.diameter_btn.setEnabled(False)
         self.distance_sensor_thread = DistanceSensorThread()
         self.distance_sensor_thread.distance_measured.connect(self.update_distance)
         self.distance_sensor_thread.start()
+        QTimer.singleShot(1000, self.distance_sensor_thread.stop)
     
     def reset_app(self):
         self.start_btn.setText("START INSPECTION")
@@ -977,7 +987,8 @@ class App(QMainWindow):
         self.test_image = image
         self.test_status = status
         self.test_recommendation = recommendation
-        self.save_btn.setEnabled(self.current_distance > 0)
+        self.diameter_btn.setEnabled(True)
+        self.save_btn.setEnabled(False)
         self.start_btn.setText("RESET")
         self.start_btn.disconnect()
         self.start_btn.clicked.connect(self.reset_app)
@@ -1061,6 +1072,3 @@ if __name__ == "__main__":
     window = App()
     window.show()
     sys.exit(app.exec_())
-    def run_model_test(self):
-        self.camera_thread.start_test()
-        self.camera_thread.start_test()
