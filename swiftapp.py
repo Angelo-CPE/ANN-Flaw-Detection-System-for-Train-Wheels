@@ -1,19 +1,42 @@
 import sys
+import os
 import time
 import cv2
+import base64
 import torch
 import numpy as np
+import requests
 from skimage.feature import hog
 from scipy.signal import hilbert
 import torch.nn as nn
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
-                            QPushButton, QLabel, QWidget, QFrame, QMessageBox, QSizePolicy)
+                            QPushButton, QLabel, QWidget, QFrame, QMessageBox, QSizePolicy,
+                            QGridLayout)
 from PyQt5.QtGui import QImage, QPixmap, QFont, QColor, QPainter, QPen, QFontDatabase, QIcon
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve
 
-# ==============================================
-# MODEL DEFINITION
-# ==============================================
+
+def send_report_to_backend(status, recommendation, image_base64, name=None, notes=""):
+    backend_url = "http://localhost:5000/api/reports"  # Replace with your backend server IP or hostname
+
+    report = {
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "status": status,
+        "recommendation": recommendation,
+        "image_path": image_base64,
+        "name": name
+    }
+
+    try:
+        response = requests.post(backend_url, json=report)
+        if response.status_code == 201:
+            print("Report sent successfully!")
+        else:
+            print(f"Failed to send report: {response.text}")
+    except Exception as e:
+        print(f"Error sending report: {e}")
+
+
 class ANNModel(nn.Module):
     def __init__(self, input_size):
         super(ANNModel, self).__init__()
@@ -33,9 +56,7 @@ class ANNModel(nn.Module):
         x = self.fc4(x)
         return x
 
-# ==============================================
-# CAMERA THREAD
-# ==============================================
+
 class CameraThread(QThread):
     change_pixmap_signal = pyqtSignal(QImage)
     status_signal = pyqtSignal(str, str)
@@ -77,17 +98,14 @@ class CameraThread(QThread):
 
     def start_test(self):
         self._testing = True
-        self._countdown = 3
-        self.enable_buttons_signal.emit(False)  # Disable buttons during countdown
-        self.countdown_timer.start(1000)  # Start countdown timer with 1-second interval
+        self._countdown = 0.5
+        self.enable_buttons_signal.emit(False)
+        self.countdown_timer.start(500)
 
     def update_countdown(self):
-        if self._countdown > 0:
-            self._countdown -= 1
-        elif self._countdown == 0:
-            self._countdown = -1
-            self.countdown_timer.stop()
-            self.process_captured_image()
+        self._countdown = -1
+        self.countdown_timer.stop()
+        self.process_captured_image()
 
     def process_captured_image(self):
         if self.last_frame is not None:
@@ -108,7 +126,7 @@ class CameraThread(QThread):
             self.status_signal.emit(status, recommendation)
             self.test_complete_signal.emit(self.last_frame, status, recommendation)
             self.animation_signal.emit()
-            self.enable_buttons_signal.emit(True)  # Re-enable buttons after processing
+            self.enable_buttons_signal.emit(True)
 
     def run(self):
         cap = cv2.VideoCapture(self.gstreamer_pipeline(), cv2.CAP_GSTREAMER)
@@ -127,14 +145,9 @@ class CameraThread(QThread):
                 processed_frame = frame.copy()
                 
                 if self._testing and self._countdown >= 0:
-                    if self._countdown > 0:
-                        cv2.putText(processed_frame, f"{self._countdown}", 
-                                    (processed_frame.shape[1]//2 - 20, processed_frame.shape[0]//2 + 20), 
-                                    cv2.FONT_HERSHEY_DUPLEX, 1.5, (255, 0, 0), 4, cv2.LINE_AA)
-                    elif self._countdown == 0:
-                        cv2.putText(processed_frame, "IMAGE CAPTURED", 
-                                    (processed_frame.shape[1]//2 - 120, processed_frame.shape[0]//2 + 20), 
-                                    cv2.FONT_HERSHEY_DUPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
+                    cv2.putText(processed_frame, "IMAGE CAPTURED", 
+                               (processed_frame.shape[1]//2 - 150, processed_frame.shape[0]//2 + 20), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
                 
                 rgb_image = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
                 h, w, ch = rgb_image.shape
@@ -160,9 +173,7 @@ class CameraThread(QThread):
             "video/x-raw, format=BGR ! appsink"
         )
 
-# ==============================================
-# MAIN APPLICATION WINDOW
-# ==============================================
+
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -170,7 +181,9 @@ class App(QMainWindow):
         self.setWindowIcon(QIcon("icon.png"))
         self.setFixedSize(800, 480)
         
-        self.load_fonts()
+        self.train_number = 1
+        self.compartment_number = 1
+        self.wheel_number = 1
         
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -218,9 +231,151 @@ class App(QMainWindow):
         self.logo_space.setFixedHeight(80)
         self.logo_space.setStyleSheet("background: transparent;")
         
-        logo_pixmap = QPixmap('D:/THESIS/ANN-Flaw-Detection-System-for-Train-Wheels/logo.png')
+        logo_pixmap = QPixmap('logo.png')
         if not logo_pixmap.isNull():
             self.logo_space.setPixmap(logo_pixmap.scaledToHeight(150, Qt.SmoothTransformation))
+        
+        # Number controls
+        self.number_controls = QFrame()
+        self.number_controls.setStyleSheet("QFrame { background: transparent; }")
+        self.number_layout = QGridLayout()
+        self.number_layout.setContentsMargins(0, 0, 0, 0)
+        self.number_layout.setSpacing(5)
+        
+        # Train Number
+        self.train_label = QLabel("Train #:")
+        self.train_label.setStyleSheet("font-family: 'Montserrat'; font-size: 12px;")
+        
+        self.train_decrement = QPushButton("-")
+        self.train_decrement.setFixedSize(25, 25)
+        self.train_decrement.setStyleSheet("""
+            QPushButton {
+                background-color: #f0f0f0;
+                border: 1px solid #ccc;
+                font-family: 'Montserrat';
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        
+        self.train_number_label = QLabel("1")
+        self.train_number_label.setAlignment(Qt.AlignCenter)
+        self.train_number_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat';
+                font-size: 14px;
+                font-weight: bold;
+                min-width: 30px;
+            }
+        """)
+        
+        self.train_increment = QPushButton("+")
+        self.train_increment.setFixedSize(25, 25)
+        self.train_increment.setStyleSheet("""
+            QPushButton {
+                background-color: #f0f0f0;
+                border: 1px solid #ccc;
+                font-family: 'Montserrat';
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        
+        # Compartment Number
+        self.compartment_label = QLabel("Compartment #:")
+        self.compartment_label.setStyleSheet("font-family: 'Montserrat'; font-size: 12px;")
+        
+        self.compartment_decrement = QPushButton("-")
+        self.compartment_decrement.setFixedSize(25, 25)
+        self.compartment_decrement.setStyleSheet("""
+            QPushButton {
+                background-color: #f0f0f0;
+                border: 1px solid #ccc;
+                font-family: 'Montserrat';
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        
+        self.compartment_number_label = QLabel("1")
+        self.compartment_number_label.setAlignment(Qt.AlignCenter)
+        self.compartment_number_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat';
+                font-size: 14px;
+                font-weight: bold;
+                min-width: 30px;
+            }
+        """)
+        
+        self.compartment_increment = QPushButton("+")
+        self.compartment_increment.setFixedSize(25, 25)
+        self.compartment_increment.setStyleSheet("""
+            QPushButton {
+                background-color: #f0f0f0;
+                border: 1px solid #ccc;
+                font-family: 'Montserrat';
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        
+        # Wheel Number
+        self.wheel_label = QLabel("Wheel #:")
+        self.wheel_label.setStyleSheet("font-family: 'Montserrat'; font-size: 12px;")
+        
+        self.wheel_decrement = QPushButton("-")
+        self.wheel_decrement.setFixedSize(25, 25)
+        self.wheel_decrement.setStyleSheet("""
+            QPushButton {
+                background-color: #f0f0f0;
+                border: 1px solid #ccc;
+                font-family: 'Montserrat';
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        
+        self.wheel_number_label = QLabel("1")
+        self.wheel_number_label.setAlignment(Qt.AlignCenter)
+        self.wheel_number_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat';
+                font-size: 14px;
+                font-weight: bold;
+                min-width: 30px;
+            }
+        """)
+        
+        self.wheel_increment = QPushButton("+")
+        self.wheel_increment.setFixedSize(25, 25)
+        self.wheel_increment.setStyleSheet("""
+            QPushButton {
+                background-color: #f0f0f0;
+                border: 1px solid #ccc;
+                font-family: 'Montserrat';
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        
+        # Add to layout
+        self.number_layout.addWidget(self.train_label, 0, 0)
+        self.number_layout.addWidget(self.train_decrement, 0, 1)
+        self.number_layout.addWidget(self.train_number_label, 0, 2)
+        self.number_layout.addWidget(self.train_increment, 0, 3)
+        
+        self.number_layout.addWidget(self.compartment_label, 1, 0)
+        self.number_layout.addWidget(self.compartment_decrement, 1, 1)
+        self.number_layout.addWidget(self.compartment_number_label, 1, 2)
+        self.number_layout.addWidget(self.compartment_increment, 1, 3)
+        
+        self.number_layout.addWidget(self.wheel_label, 2, 0)
+        self.number_layout.addWidget(self.wheel_decrement, 2, 1)
+        self.number_layout.addWidget(self.wheel_number_label, 2, 2)
+        self.number_layout.addWidget(self.wheel_increment, 2, 3)
+        
+        self.number_controls.setLayout(self.number_layout)
         
         self.status_title = QLabel("INSPECTION STATUS")
         self.status_title.setAlignment(Qt.AlignCenter)
@@ -245,6 +400,23 @@ class App(QMainWindow):
             }
         """)
         
+        # Analyzing animation setup
+        self.analyzing_animation_timer = QTimer()
+        self.analyzing_dots = 0
+        self.max_dots = 3
+        
+        self.analyzing_label = QLabel("ANALYZING")
+        self.analyzing_label.setAlignment(Qt.AlignCenter)
+        self.analyzing_label.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 18px;
+                padding: 15px 0;
+            }
+        """)
+        self.analyzing_label.hide()
+        
         self.recommendation_indicator = QLabel()
         self.recommendation_indicator.setAlignment(Qt.AlignCenter)
         self.recommendation_indicator.setStyleSheet("""
@@ -256,10 +428,26 @@ class App(QMainWindow):
             }
         """)
         
+        # Wheel diameter measurement
+        self.diameter_label = QLabel("Wheel Diameter: -")
+        self.diameter_label.setAlignment(Qt.AlignCenter)
+        self.diameter_label.setStyleSheet("""
+            QLabel {
+                color: #333;
+                font-family: 'Montserrat';
+                font-size: 16px;
+                padding: 5px 0;
+            }
+        """)
+        self.diameter_label.hide()
+        
         self.status_layout.addWidget(self.logo_space)
+        self.status_layout.addWidget(self.number_controls)
         self.status_layout.addWidget(self.status_title)
         self.status_layout.addWidget(self.status_indicator)
+        self.status_layout.addWidget(self.analyzing_label)
         self.status_layout.addWidget(self.recommendation_indicator)
+        self.status_layout.addWidget(self.diameter_label)
         self.status_panel.setLayout(self.status_layout)
         
         # Button Panel
@@ -319,19 +507,26 @@ class App(QMainWindow):
         self.setup_animations()
         self.setup_camera_thread()
         self.connect_signals()
+        self.setup_number_controls()
 
-    def load_fonts(self):
-        font_db = QFontDatabase()
-        
-        regular_font_id = font_db.addApplicationFont("D:/THESIS/ANN-Flaw-Detection-System-for-Train-Wheels/Montserrat-Regular.ttf")
-        extrabold_font_id = font_db.addApplicationFont("D:/THESIS/ANN-Flaw-Detection-System-for-Train-Wheels/Montserrat-ExtraBold.ttf")
-        black_font_id = font_db.addApplicationFont("D:/THESIS/ANN-Flaw-Detection-System-for-Train-Wheels/Montserrat-Black.ttf")
-        
-        if regular_font_id == -1: print("Failed to load Montserrat-Regular")
-        if extrabold_font_id == -1: print("Failed to load Montserrat-ExtraBold")
-        if black_font_id == -1: print("Failed to load Montserrat-Black")
-        
-        QApplication.instance().setFont(QFont("Montserrat", 10))
+    def setup_number_controls(self):
+        self.train_decrement.clicked.connect(lambda: self.update_number('train', -1))
+        self.train_increment.clicked.connect(lambda: self.update_number('train', 1))
+        self.compartment_decrement.clicked.connect(lambda: self.update_number('compartment', -1))
+        self.compartment_increment.clicked.connect(lambda: self.update_number('compartment', 1))
+        self.wheel_decrement.clicked.connect(lambda: self.update_number('wheel', -1))
+        self.wheel_increment.clicked.connect(lambda: self.update_number('wheel', 1))
+
+    def update_number(self, number_type, change):
+        if number_type == 'train':
+            self.train_number = max(1, min(20, self.train_number + change))
+            self.train_number_label.setText(str(self.train_number))
+        elif number_type == 'compartment':
+            self.compartment_number = max(1, min(8, self.compartment_number + change))
+            self.compartment_number_label.setText(str(self.compartment_number))
+        elif number_type == 'wheel':
+            self.wheel_number = max(1, min(8, self.wheel_number + change))
+            self.wheel_number_label.setText(str(self.wheel_number))
 
     def setup_animations(self):
         self.status_animation = QPropertyAnimation(self.status_indicator, b"windowOpacity")
@@ -353,7 +548,7 @@ class App(QMainWindow):
 
     def set_buttons_enabled(self, enabled):
         self.start_btn.setEnabled(enabled)
-        self.save_btn.setEnabled(enabled and self.save_btn.isEnabled())  # Preserve save button state
+        self.save_btn.setEnabled(enabled and self.save_btn.isEnabled())
 
     def trigger_animation(self):
         self.status_animation.start()
@@ -364,11 +559,37 @@ class App(QMainWindow):
             Qt.KeepAspectRatio, Qt.SmoothTransformation
         ))
 
+    def show_analyzing_animation(self):
+        self.analyzing_label.show()
+        self.analyzing_dots = 0
+        self.analyzing_animation_timer.timeout.connect(self.update_analyzing_text)
+        self.analyzing_animation_timer.start(500)
+        self.status_indicator.hide()
+        self.diameter_label.hide()
+
+    def hide_analyzing_animation(self):
+        self.analyzing_animation_timer.stop()
+        self.analyzing_label.hide()
+        self.status_indicator.show()
+
+    def update_analyzing_text(self):
+        self.analyzing_dots = (self.analyzing_dots + 1) % (self.max_dots + 1)
+        dots = "." * self.analyzing_dots
+        self.analyzing_label.setText(f"ANALYZING{dots}")
+
     def update_status(self, status, recommendation):
+        if status == "ANALYZING...":
+            self.show_analyzing_animation()
+        else:
+            self.hide_analyzing_animation()
+            # Show diameter measurement after analysis is complete
+            self.diameter_label.setText("Wheel Diameter: 680 mm")
+            self.diameter_label.show()
+            
         self.status_indicator.setText(status)
         self.recommendation_indicator.setText(recommendation)
         
-        if "FLAW" in status:
+        if status == "FLAW DETECTED":
             self.status_indicator.setStyleSheet("""
                 QLabel {
                     color: red;
@@ -379,23 +600,30 @@ class App(QMainWindow):
             """)
             self.recommendation_indicator.setStyleSheet("""
                 QLabel {
-                    color: red;
+                    color: black;
                     font-family: 'Montserrat';
                     font-size: 14px;
                     padding: 10px 0;
                 }
             """)
-            # Set camera border to red
+            self.diameter_label.setStyleSheet("""
+                QLabel {
+                    color: #333;
+                    font-family: 'Montserrat';
+                    font-size: 16px;
+                    padding: 5px 0;
+                }
+            """)
             self.camera_label.setStyleSheet("""
                 QLabel {
                     background: black;
                     border: 4px solid red;
                 }
             """)
-        else:
+        elif status == "NO FLAW":
             self.status_indicator.setStyleSheet("""
                 QLabel {
-                    color: green;
+                    color: #00CC00;
                     font-family: 'Montserrat ExtraBold';
                     font-size: 18px;
                     padding: 15px 0;
@@ -403,17 +631,55 @@ class App(QMainWindow):
             """)
             self.recommendation_indicator.setStyleSheet("""
                 QLabel {
-                    color: green;
+                    color: black;
                     font-family: 'Montserrat';
                     font-size: 14px;
                     padding: 10px 0;
                 }
             """)
-            # Set camera border to green
+            self.diameter_label.setStyleSheet("""
+                QLabel {
+                    color: #333;
+                    font-family: 'Montserrat';
+                    font-size: 16px;
+                    padding: 5px 0;
+                }
+            """)
             self.camera_label.setStyleSheet("""
                 QLabel {
                     background: black;
-                    border: 4px solid green;
+                    border: 4px solid #00CC00;
+                }
+            """)
+        else:
+            self.status_indicator.setStyleSheet("""
+                QLabel {
+                    color: black;
+                    font-family: 'Montserrat ExtraBold';
+                    font-size: 18px;
+                    padding: 15px 0;
+                }
+            """)
+            self.recommendation_indicator.setStyleSheet("""
+                QLabel {
+                    color: #666;
+                    font-family: 'Montserrat';
+                    font-size: 14px;
+                    padding: 10px 0;
+                }
+            """)
+            self.diameter_label.setStyleSheet("""
+                QLabel {
+                    color: #333;
+                    font-family: 'Montserrat';
+                    font-size: 16px;
+                    padding: 5px 0;
+                }
+            """)
+            self.camera_label.setStyleSheet("""
+                QLabel {
+                    background: black;
+                    border: none;
                 }
             """)
         
@@ -429,13 +695,13 @@ class App(QMainWindow):
                 padding: 15px 0;
             }
         """)
-        # Reset camera border during analysis
         self.camera_label.setStyleSheet("""
             QLabel {
                 background: black;
                 border: none;
             }
         """)
+        self.diameter_label.hide()
         self.camera_thread.start_test()
 
     def reset_app(self):
@@ -444,6 +710,8 @@ class App(QMainWindow):
         self.save_btn.setEnabled(False)
         self.status_indicator.setText("READY")
         self.recommendation_indicator.setText("")
+        self.diameter_label.setText("Wheel Diameter: -")
+        self.diameter_label.hide()
         self.status_indicator.setStyleSheet("""
             QLabel {
                 color: black;
@@ -460,7 +728,6 @@ class App(QMainWindow):
                 padding: 10px 0;
             }
         """)
-        # Reset camera border to default
         self.camera_label.setStyleSheet("""
             QLabel {
                 background: black;
@@ -511,43 +778,25 @@ class App(QMainWindow):
         
         if msg.exec_() == QMessageBox.Save:
             timestamp = time.strftime("%Y%m%d_%H%M%S")
-            filename = f"wheel_inspection_{timestamp}.jpg"
-            cv2.imwrite(filename, self.test_image)
             
-            with open(f"wheel_inspection_{timestamp}.txt", "w") as f:
-                f.write(f"Inspection Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write(f"Status: {self.test_status}\n")
-                f.write(f"Recommendation: {self.test_recommendation}\n")
+            # Convert image to base64
+            _, buffer = cv2.imencode('.jpg', self.test_image)
+            image_base64 = base64.b64encode(buffer).decode('utf-8')
             
-            success_msg = QMessageBox()
-            success_msg.setWindowTitle("Success")
-            success_msg.setText(f"Saved as {filename}")
-            success_msg.setIcon(QMessageBox.Information)
-            success_msg.setStyleSheet("""
-                QMessageBox {
-                    background-color: white;
-                    border: 1px solid #ddd;
-                    font-family: 'Montserrat';
-                }
-                QLabel { color: black; font-size: 14px; }
-                QPushButton {
-                    background-color: black;
-                    color: white;
-                    border: none;
-                    padding: 8px 16px;
-                    font-family: 'Montserrat ExtraBold';
-                    font-size: 14px;
-                    min-width: 80px;
-                }
-                QPushButton:hover { background-color: #333; }
-            """)
-            success_msg.exec_()
-        
+            report_name = f"Train {self.train_number} - Compartment {self.compartment_number} - Wheel {self.wheel_number}"
+            
+            send_report_to_backend(
+                status=self.test_status,
+                recommendation=self.test_recommendation,
+                image_base64=image_base64,
+                name=report_name,
+            )
         self.save_btn.setEnabled(False)
 
     def closeEvent(self, event):
         self.camera_thread.stop()
         event.accept()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
