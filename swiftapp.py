@@ -22,16 +22,20 @@ except ImportError:
     print("VL53L0X library not found. Distance measurement will be simulated.")
     VL53L0X = None
 
-
-def send_report_to_backend(status, recommendation, image_base64, name=None, notes=""):
-    backend_url = "http://localhost:5000/api/reports"  # Replace with your backend server IP or hostname
+def send_report_to_backend(status, recommendation, image_base64, name=None, notes="", train_number=None, compartment_number=None, wheel_number=None, wheel_diameter=None):
+    backend_url = "http://localhost:5000/api/reports"  # Update as needed
 
     report = {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "status": status,
         "recommendation": recommendation,
         "image_path": image_base64,
-        "name": name
+        "name": name,
+        "notes": notes,
+        "train_number": train_number,
+        "compartment_number": compartment_number,
+        "wheel_number": wheel_number,
+        "wheel_diameter": wheel_diameter
     }
 
     try:
@@ -42,7 +46,6 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, note
             print(f"Failed to send report: {response.text}")
     except Exception as e:
         print(f"Error sending report: {e}")
-
 
 class DistanceSensorThread(QThread):
     distance_measured = pyqtSignal(int)
@@ -885,6 +888,10 @@ class App(QMainWindow):
                 recommendation=self.test_recommendation,
                 image_base64=image_base64,
                 name=report_name,
+                train_number=self.train_number,
+                compartment_number=self.compartment_number,
+                wheel_number=self.wheel_number,
+                wheel_diameter=self.current_distance
             )
         self.save_btn.setEnabled(False)
 
