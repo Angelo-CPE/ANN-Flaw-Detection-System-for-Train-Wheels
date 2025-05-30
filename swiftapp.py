@@ -57,6 +57,27 @@ class DistanceSensorThread(QThread):
 
     def __init__(self):
         super().__init__()
+        self.tof = None
+
+    def run(self):
+        try:
+            import VL53L0X
+            self.tof = VL53L0X.VL53L0X()
+            self.tof.open()
+            self.tof.start_ranging(VL53L0X.Vl53l0xAccuracyMode.GOOD)
+            time.sleep(1)
+            distance = self.tof.get_distance()
+            self.tof.stop_ranging()
+            self.tof.close()
+            self.distance_measured.emit(distance)
+        except Exception as e:
+            print(f"VL53L0X error: {e}")
+            self.distance_measured.emit(680)
+
+    distance_measured = pyqtSignal(int)
+
+    def __init__(self):
+        super().__init__()
         self._run_flag = True
         self.tof = None
         self.sensor_initialized = False
@@ -178,6 +199,29 @@ class CameraThread(QThread):
             return np.zeros(2019)
 
     def start_test(self):
+        self.status_indicator.setText("ANALYZING...")
+        self.status_indicator.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 18px;
+                padding: 15px 0;
+            }
+        """)
+        self.camera_label.setStyleSheet("""
+            QLabel {
+                background: black;
+                border: none;
+            }
+        """)
+        self.diameter_label.hide()
+
+        # Run ToF sensor one-time read
+        self.sensor_thread = DistanceSensorThread()
+        self.sensor_thread.distance_measured.connect(self.update_distance)
+        self.sensor_thread.finished.connect(self.run_model_test)
+        self.sensor_thread.start()
+
         if self.model is None:
             self.status_signal.emit("Error", "Model not loaded")
             return
@@ -186,6 +230,10 @@ class CameraThread(QThread):
         self._countdown = 0.5
         self.enable_buttons_signal.emit(False)
         self.countdown_timer.start(500)
+
+    
+    def run_model_test(self):
+        self.camera_thread.start_test()
 
     def update_countdown(self):
         self._countdown = -1
@@ -662,7 +710,7 @@ class App(QMainWindow):
         
         self.setup_animations()
         self.setup_camera_thread()
-        self.setup_distance_sensor()
+        # self.setup_distance_sensor()
         self.connect_signals()
         self.setup_number_controls()
 
@@ -847,6 +895,29 @@ class App(QMainWindow):
             }
         """)
         self.diameter_label.hide()
+
+        # Run ToF sensor one-time read
+        self.sensor_thread = DistanceSensorThread()
+        self.sensor_thread.distance_measured.connect(self.update_distance)
+        self.sensor_thread.finished.connect(self.run_model_test)
+        self.sensor_thread.start()
+
+        self.status_indicator.setText("ANALYZING...")
+        self.status_indicator.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 18px;
+                padding: 15px 0;
+            }
+        """)
+        self.camera_label.setStyleSheet("""
+            QLabel {
+                background: black;
+                border: none;
+            }
+        """)
+        self.diameter_label.hide()
         self.camera_thread.start_test()
 
     def reset_app(self):
@@ -944,7 +1015,7 @@ class App(QMainWindow):
 
     def closeEvent(self, event):
         self.camera_thread.stop()
-        self.distance_sensor_thread.stop()
+        if hasattr(self, 'distance_sensor_thread'): self.distance_sensor_thread.stop()
         event.accept()
 
 
@@ -970,3 +1041,6 @@ if __name__ == "__main__":
     window = App()
     window.show()
     sys.exit(app.exec_())
+
+    def run_model_test(self):
+        self.camera_thread.start_test()
