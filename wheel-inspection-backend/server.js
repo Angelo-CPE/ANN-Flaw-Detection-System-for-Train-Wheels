@@ -110,19 +110,31 @@ app.get('/test', (req, res) => {
  
 app.post('/api/reports', upload.single('image'), async (req, res) => {
   try {
-    console.log('Incoming report:', req.body);  // 👈 ADD THIS LINE
+    const {
+      trainNumber,
+      compartmentNumber,
+      wheelNumber,
+      status,
+      recommendation,
+      name,
+      notes,
+      wheel_diameter
+    } = req.body;
 
-    const { trainNumber, compartmentNumber, wheelNumber, status, image_path, recommendation, name, notes, wheel_diameter } = req.body;
+    if (!trainNumber || !compartmentNumber || !wheelNumber || !req.file) {
+      return res.status(400).json({ error: 'Missing required fields or image' });
+    }
+
     const report = new Report({
       timestamp: new Date(),
       trainNumber,
       compartmentNumber,
       wheelNumber,
-      status,
-      image_path,
+      status: status || 'NO FLAW',
       recommendation,
       name,
       notes,
+      image_path: `/uploads/${req.file.filename}`,
       wheel_diameter
     });
 
@@ -130,6 +142,7 @@ app.post('/api/reports', upload.single('image'), async (req, res) => {
     broadcastNewReport(report);
     res.status(201).json(report);
   } catch (err) {
+    if (req.file) fs.unlinkSync(req.file.path);
     res.status(400).json({ error: err.message });
   }
 });
