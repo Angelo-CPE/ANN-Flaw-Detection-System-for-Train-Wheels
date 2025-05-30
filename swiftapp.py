@@ -189,10 +189,15 @@ class CameraThread(QThread):
             return
 
         try:
+            cv2.imwrite("captured_frame.jpg", self.last_frame)
             features = self.preprocess_image(self.last_frame)
             features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self.device)
             
             with torch.no_grad():
+                outputs = self.model(features_tensor)
+                print("Model Raw Output:", outputs.cpu().numpy())
+                probs = torch.softmax(outputs, dim=1)
+                print("Probabilities:", probs.cpu().numpy())
                 outputs = self.model(features_tensor)
                 _, predicted = torch.max(outputs, 1)
             
