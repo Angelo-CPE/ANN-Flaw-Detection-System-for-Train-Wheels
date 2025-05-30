@@ -108,16 +108,18 @@ class DistanceSensorThread(QThread):
 class ANNModel(nn.Module):
     def __init__(self, input_size):
         super(ANNModel, self).__init__()
-        self.fc1 = nn.Linear(input_size, 128)  # Reduced size for Jetson Nano
+        self.fc1 = nn.Linear(input_size, 256)  # Updated to match saved model
         self.dropout1 = nn.Dropout(0.2)
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, 2)
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, 64)
+        self.fc4 = nn.Linear(64, 2)  # Added to match saved model
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
         x = self.dropout1(x)
         x = torch.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = torch.relu(self.fc3(x))
+        x = self.fc4(x)
         return x
 
 class CameraThread(QThread):
@@ -153,6 +155,14 @@ class CameraThread(QThread):
         except Exception as e:
             print(f"Error loading model: {e}")
             self.model = None
+
+    def unload_model(self):
+        """Unload the model to free up memory"""
+        if hasattr(self, 'model') and self.model is not None:
+            del self.model
+            self.model = None
+            torch.cuda.empty_cache()  # Clear CUDA cache if using GPU
+            print("Model unloaded successfully")
 
     def preprocess_image(self, frame):
         try:
@@ -1005,6 +1015,51 @@ class App(QMainWindow):
         self.detect_btn.setEnabled(True)
         self.measure_btn.setEnabled(True)
         self.save_btn.setEnabled(False)  # Still need measurement before saving
+        
+        # Unload the model after displaying results
+        self.camera_thread.unload_model()
+
+    def reset_ui(self):
+        self.status_indicator.setText("READY")
+        self.recommendation_indicator.setText("")
+        self.diameter_label.setText("Wheel Diameter: -")
+        self.diameter_label.hide()
+        self.status_indicator.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 18px;
+                padding: 15px 0;
+            }
+        """)
+        self.recommendation_indicator.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-family: 'Montserrat';
+                font-size: 14px;
+                padding: 10px 0;
+            }
+        """)
+        self.camera_label.setStyleSheet("""
+            QLabel {
+                background: black;
+                border: none;
+            }
+        """)
+        
+        # Reset buttons
+        self.detect_btn.setEnabled(True)
+        self.measure_btn.setEnabled(False)
+        self.save_btn.setEnabled(False)
+        
+        # Reset data
+        self.current_distance = 680
+        self.test_image = None
+        self.test_status = None
+        self.test_recommendation = None
+        
+        # Reload the model for next use
+        self.camera_thread.load_model()
 
     def closeEvent(self, event):
         self.camera_thread.stop()
