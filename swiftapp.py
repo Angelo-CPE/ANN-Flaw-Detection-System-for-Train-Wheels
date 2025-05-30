@@ -331,11 +331,264 @@ class App(QMainWindow):
         self.number_layout.setContentsMargins(0, 0, 0, 0)
         self.number_layout.setSpacing(5)
         
-        # Train Number controls...
-        # [Previous number controls code remains the same]
+        # Train Number
+        self.train_label = QLabel("Train")
+        self.train_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat SemiBold';
+                font-size: 15px;
+                color: #333;
+                padding-right: 6px;
+            }
+        """)
         
-        # Status indicators...
-        # [Previous status indicators code remains the same]
+        self.train_decrement = QPushButton("-")
+        self.train_decrement.setFixedSize(25, 25)
+        self.train_decrement.setStyleSheet("""
+            QPushButton {
+                background-color: #f7f7f7;
+                border: 1px solid #bbb;
+                font-family: 'Montserrat Bold';
+                font-size: 14px;
+                min-width: 25px;
+                max-width: 25px;
+                height: 25px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        
+        self.trainNumber_label = QLabel("1")
+        self.trainNumber_label.setAlignment(Qt.AlignCenter)
+        self.trainNumber_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat Black';
+                font-size: 16px;
+                color: #111;
+                min-width: 32px;
+                min-height: 25px;
+                background-color: #fff;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                text-align: center;
+            }
+        """)
+        self.train_increment = QPushButton("+")
+        self.train_increment.setFixedSize(25, 25)
+        self.train_increment.setStyleSheet("""
+            QPushButton {
+                background-color: #f7f7f7;
+                border: 1px solid #bbb;
+                font-family: 'Montserrat Bold';
+                font-size: 14px;
+                min-width: 25px;
+                max-width: 25px;
+                height: 25px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        
+        # Compartment Number
+        self.compartment_label = QLabel("Compartment")
+        self.compartment_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat SemiBold';
+                font-size: 15px;
+                color: #333;
+                padding-right: 6px;
+            }
+        """)
+        
+        self.compartment_decrement = QPushButton("-")
+        self.compartment_decrement.setFixedSize(25, 25)
+        self.compartment_decrement.setStyleSheet("""
+            QPushButton {
+                background-color: #f7f7f7;
+                border: 1px solid #bbb;
+                font-family: 'Montserrat Bold';
+                font-size: 14px;
+                min-width: 25px;
+                max-width: 25px;
+                height: 25px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        
+        self.compartmentNumber_label = QLabel("1")
+        self.compartmentNumber_label.setAlignment(Qt.AlignCenter)
+        self.compartmentNumber_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat Black';
+                font-size: 16px;
+                color: #111;
+                min-width: 32px;
+                min-height: 25px;
+                background-color: #fff;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                text-align: center;
+            }
+        """)
+        
+        self.compartment_increment = QPushButton("+")
+        self.compartment_increment.setFixedSize(25, 25)
+        self.compartment_increment.setStyleSheet("""
+            QPushButton {
+                background-color: #f7f7f7;
+                border: 1px solid #bbb;
+                font-family: 'Montserrat Bold';
+                font-size: 14px;
+                min-width: 25px;
+                max-width: 25px;
+                height: 25px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        
+        # Wheel Number
+        self.wheel_label = QLabel("Wheel")
+        self.wheel_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat SemiBold';
+                font-size: 15px;
+                color: #333;
+                padding-right: 6px;
+            }
+        """)
+        
+        self.wheel_decrement = QPushButton("-")
+        self.wheel_decrement.setFixedSize(25, 25)
+        self.wheel_decrement.setStyleSheet("""
+            QPushButton {
+                background-color: #f7f7f7;
+                border: 1px solid #bbb;
+                font-family: 'Montserrat Bold';
+                font-size: 14px;
+                min-width: 25px;
+                max-width: 25px;
+                height: 25px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        
+        self.wheelNumber_label = QLabel("1")
+        self.wheelNumber_label.setAlignment(Qt.AlignCenter)
+        self.wheelNumber_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat Black';
+                font-size: 16px;
+                color: #111;
+                min-width: 32px;
+                min-height: 25px;
+                background-color: #fff;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                text-align: center;
+            }
+        """)
+        
+        self.wheel_increment = QPushButton("+")
+        self.wheel_increment.setFixedSize(25, 25)
+        self.wheel_increment.setStyleSheet("""
+            QPushButton {
+                background-color: #f7f7f7;
+                border: 1px solid #bbb;
+                font-family: 'Montserrat Bold';
+                font-size: 14px;
+                min-width: 25px;
+                max-width: 25px;
+                height: 25px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        
+        # Add to layout
+        self.number_layout.addWidget(self.train_label, 0, 0)
+        self.number_layout.addWidget(self.train_decrement, 0, 1)
+        self.number_layout.addWidget(self.trainNumber_label, 0, 2)
+        self.number_layout.addWidget(self.train_increment, 0, 3)
+        
+        self.number_layout.addWidget(self.compartment_label, 1, 0)
+        self.number_layout.addWidget(self.compartment_decrement, 1, 1)
+        self.number_layout.addWidget(self.compartmentNumber_label, 1, 2)
+        self.number_layout.addWidget(self.compartment_increment, 1, 3)
+        
+        self.number_layout.addWidget(self.wheel_label, 2, 0)
+        self.number_layout.addWidget(self.wheel_decrement, 2, 1)
+        self.number_layout.addWidget(self.wheelNumber_label, 2, 2)
+        self.number_layout.addWidget(self.wheel_increment, 2, 3)
+        
+        self.number_controls.setLayout(self.number_layout)
+        
+        self.status_title = QLabel("INSPECTION STATUS")
+        self.status_title.setAlignment(Qt.AlignCenter)
+        self.status_title.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-family: 'Montserrat Black';
+                font-size: 20px;
+                padding-bottom: 2px;
+                border-bottom: 1px solid #eee;
+            }
+        """)
+        
+        self.status_indicator = QLabel("READY")
+        self.status_indicator.setAlignment(Qt.AlignCenter)
+        self.status_indicator.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 15px;
+                padding-top: 2px;
+                padding-bottom: 0px;
+            }
+        """)
+
+        self.analyzing_label = QLabel("ANALYZING")
+        self.analyzing_label.setAlignment(Qt.AlignCenter)
+        self.analyzing_label.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 15px;
+                padding-top: 0px;
+                padding-bottom: 0px;
+            }
+        """)
+        self.analyzing_label.hide()
+
+        self.recommendation_indicator = QLabel()
+        self.recommendation_indicator.setAlignment(Qt.AlignCenter)
+        self.recommendation_indicator.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-family: 'Montserrat';
+                font-size: 14px;
+                padding-top: 0px;
+                padding-bottom: 0px;
+            }
+        """)
+
+        self.diameter_label = QLabel("Wheel Diameter: -")
+        self.diameter_label.setAlignment(Qt.AlignCenter)
+        self.diameter_label.setStyleSheet("""
+            QLabel {
+                color: #333;
+                font-family: 'Montserrat';
+                font-size: 14px;
+                padding-top: 0px;
+                padding-bottom: 0px;
+            }
+        """)
+        self.diameter_label.hide()
+        
+        self.status_layout.addWidget(self.logo_space)
+        self.status_layout.addWidget(self.number_controls)
+        self.status_layout.addWidget(self.status_title)
+        self.status_layout.addWidget(self.status_indicator)
+        self.status_layout.addWidget(self.analyzing_label)
+        self.status_layout.addWidget(self.recommendation_indicator)
+        self.status_layout.addWidget(self.diameter_label)
+        self.status_panel.setLayout(self.status_layout)
         
         # Button Panel
         self.button_panel = QFrame()
@@ -425,12 +678,31 @@ class App(QMainWindow):
         self.setup_number_controls()
 
     def setup_number_controls(self):
-        # [Previous number controls setup remains the same]
+        self.train_decrement.clicked.connect(lambda: self.update_number('train', -1))
+        self.train_increment.clicked.connect(lambda: self.update_number('train', 1))
+        self.compartment_decrement.clicked.connect(lambda: self.update_number('compartment', -1))
+        self.compartment_increment.clicked.connect(lambda: self.update_number('compartment', 1))
+        self.wheel_decrement.clicked.connect(lambda: self.update_number('wheel', -1))
+        self.wheel_increment.clicked.connect(lambda: self.update_number('wheel', 1))
         pass
 
     def update_number(self, number_type, change):
-        # [Previous number update code remains the same]
+        if number_type == 'train':
+            self.trainNumber = max(1, min(20, self.trainNumber + change))
+            self.trainNumber_label.setText(str(self.trainNumber))
+        elif number_type == 'compartment':
+            self.compartmentNumber = max(1, min(8, self.compartmentNumber + change))
+            self.compartmentNumber_label.setText(str(self.compartmentNumber))
+        elif number_type == 'wheel':
+            self.wheelNumber = max(1, min(8, self.wheelNumber + change))
+            self.wheelNumber_label.setText(str(self.wheelNumber))
         pass
+
+    def setup_animations(self):
+        self.status_animation = QPropertyAnimation(self.status_indicator, b"windowOpacity")
+        self.status_animation.setDuration(300)
+        self.status_animation.setStartValue(0.7)
+        self.status_animation.setEndValue(1.0)
 
     def setup_animations(self):
         self.status_animation = QPropertyAnimation(self.status_indicator, b"windowOpacity")
