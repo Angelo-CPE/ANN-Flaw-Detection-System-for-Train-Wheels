@@ -691,6 +691,7 @@ class App(QMainWindow):
         """)
         self.button_layout.addWidget(self.reset_btn)
 
+        
         self.button_layout.addWidget(self.reset_btn)
         self.button_layout.addWidget(self.save_btn)
         self.button_panel.setLayout(self.button_layout)
@@ -925,7 +926,7 @@ class App(QMainWindow):
         self.camera_thread.start_test()
 
     def measure_diameter(self):
-        self.status_indicator.setText("MEASURING DIAMETER...")
+        # self.status_indicator.setText("MEASURING DIAMETER...")  # Removed to preserve flaw detection status
         self.diameter_label.setText("Measuring...")
         self.diameter_label.show()
 
