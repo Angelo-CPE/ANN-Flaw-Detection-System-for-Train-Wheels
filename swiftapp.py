@@ -15,6 +15,13 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
 from PyQt5.QtGui import QImage, QPixmap, QFont, QColor, QPainter, QPen, QFontDatabase, QIcon
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve
 
+# Import VL53L0X library
+try:
+    import VL53L0X
+except ImportError:
+    print("VL53L0X library not found. Distance measurement will be simulated.")
+    VL53L0X = None
+
 
 def send_report_to_backend(status, recommendation, image_base64, name=None, notes=""):
     backend_url = "http://localhost:5000/api/reports"  # Replace with your backend server IP or hostname
@@ -35,6 +42,48 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, note
             print(f"Failed to send report: {response.text}")
     except Exception as e:
         print(f"Error sending report: {e}")
+
+
+class DistanceSensorThread(QThread):
+    distance_measured = pyqtSignal(int)
+
+    def __init__(self):
+        super().__init__()
+        self._run_flag = True
+        self.tof = None
+
+    def run(self):
+        if VL53L0X is None:
+            # Simulate distance measurement if sensor is not available
+            while self._run_flag:
+                simulated_distance = 680  # Default simulated value
+                self.distance_measured.emit(simulated_distance)
+                time.sleep(0.2)
+            return
+
+        try:
+            self.tof = VL53L0X.VL53L0X()
+            self.tof.open()
+            self.tof.start_ranging(VL53L0X.Vl53l0xAccuracyMode.GOOD)
+
+            while self._run_flag:
+                distance = self.tof.get_distance()
+                if distance > 0:  # Only emit valid measurements
+                    self.distance_measured.emit(distance)
+                time.sleep(0.2)  # Delay to avoid spamming measurements
+
+        except Exception as e:
+            print(f"Error with distance sensor: {e}")
+            # Emit simulated value if there's an error
+            self.distance_measured.emit(680)
+        finally:
+            if self.tof is not None:
+                self.tof.stop_ranging()
+                self.tof.close()
+
+    def stop(self):
+        self._run_flag = False
+        self.wait()
 
 
 class ANNModel(nn.Module):
@@ -180,10 +229,11 @@ class App(QMainWindow):
         self.setWindowTitle("Wheel Inspection")
         self.setWindowIcon(QIcon("icon.png"))
         self.setFixedSize(800, 480)
-        
+            
         self.train_number = 1
         self.compartment_number = 1
         self.wheel_number = 1
+        self.current_distance = 0
         
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -243,17 +293,27 @@ class App(QMainWindow):
         self.number_layout.setSpacing(5)
         
         # Train Number
-        self.train_label = QLabel("Train #:")
-        self.train_label.setStyleSheet("font-family: 'Montserrat'; font-size: 12px;")
+        self.train_label = QLabel("Train")
+        self.train_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat SemiBold';
+                font-size: 15px;
+                color: #333;
+                padding-right: 6px;
+            }
+        """)
         
         self.train_decrement = QPushButton("-")
         self.train_decrement.setFixedSize(25, 25)
         self.train_decrement.setStyleSheet("""
             QPushButton {
-                background-color: #f0f0f0;
-                border: 1px solid #ccc;
-                font-family: 'Montserrat';
-                font-size: 12px;
+                background-color: #f7f7f7;
+                border: 1px solid #bbb;
+                font-family: 'Montserrat Bold';
+                font-size: 14px;
+                min-width: 25px;
+                max-width: 25px;
+                height: 25px;
             }
             QPushButton:hover { background-color: #e0e0e0; }
         """)
@@ -262,37 +322,54 @@ class App(QMainWindow):
         self.train_number_label.setAlignment(Qt.AlignCenter)
         self.train_number_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat';
-                font-size: 14px;
-                font-weight: bold;
-                min-width: 30px;
+                font-family: 'Montserrat Black';
+                font-size: 16px;
+                color: #111;
+                min-width: 32px;
+                min-height: 25px;
+                background-color: #fff;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                text-align: center;
             }
         """)
-        
         self.train_increment = QPushButton("+")
         self.train_increment.setFixedSize(25, 25)
         self.train_increment.setStyleSheet("""
             QPushButton {
-                background-color: #f0f0f0;
-                border: 1px solid #ccc;
-                font-family: 'Montserrat';
-                font-size: 12px;
+                background-color: #f7f7f7;
+                border: 1px solid #bbb;
+                font-family: 'Montserrat Bold';
+                font-size: 14px;
+                min-width: 25px;
+                max-width: 25px;
+                height: 25px;
             }
             QPushButton:hover { background-color: #e0e0e0; }
         """)
         
         # Compartment Number
-        self.compartment_label = QLabel("Compartment #:")
-        self.compartment_label.setStyleSheet("font-family: 'Montserrat'; font-size: 12px;")
+        self.compartment_label = QLabel("Compartment")
+        self.compartment_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat SemiBold';
+                font-size: 15px;
+                color: #333;
+                padding-right: 6px;
+            }
+        """)
         
         self.compartment_decrement = QPushButton("-")
         self.compartment_decrement.setFixedSize(25, 25)
         self.compartment_decrement.setStyleSheet("""
             QPushButton {
-                background-color: #f0f0f0;
-                border: 1px solid #ccc;
-                font-family: 'Montserrat';
-                font-size: 12px;
+                background-color: #f7f7f7;
+                border: 1px solid #bbb;
+                font-family: 'Montserrat Bold';
+                font-size: 14px;
+                min-width: 25px;
+                max-width: 25px;
+                height: 25px;
             }
             QPushButton:hover { background-color: #e0e0e0; }
         """)
@@ -301,10 +378,15 @@ class App(QMainWindow):
         self.compartment_number_label.setAlignment(Qt.AlignCenter)
         self.compartment_number_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat';
-                font-size: 14px;
-                font-weight: bold;
-                min-width: 30px;
+                font-family: 'Montserrat Black';
+                font-size: 16px;
+                color: #111;
+                min-width: 32px;
+                min-height: 25px;
+                background-color: #fff;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                text-align: center;
             }
         """)
         
@@ -312,26 +394,39 @@ class App(QMainWindow):
         self.compartment_increment.setFixedSize(25, 25)
         self.compartment_increment.setStyleSheet("""
             QPushButton {
-                background-color: #f0f0f0;
-                border: 1px solid #ccc;
-                font-family: 'Montserrat';
-                font-size: 12px;
+                background-color: #f7f7f7;
+                border: 1px solid #bbb;
+                font-family: 'Montserrat Bold';
+                font-size: 14px;
+                min-width: 25px;
+                max-width: 25px;
+                height: 25px;
             }
             QPushButton:hover { background-color: #e0e0e0; }
         """)
         
         # Wheel Number
-        self.wheel_label = QLabel("Wheel #:")
-        self.wheel_label.setStyleSheet("font-family: 'Montserrat'; font-size: 12px;")
+        self.wheel_label = QLabel("Wheel")
+        self.wheel_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat SemiBold';
+                font-size: 15px;
+                color: #333;
+                padding-right: 6px;
+            }
+        """)
         
         self.wheel_decrement = QPushButton("-")
         self.wheel_decrement.setFixedSize(25, 25)
         self.wheel_decrement.setStyleSheet("""
             QPushButton {
-                background-color: #f0f0f0;
-                border: 1px solid #ccc;
-                font-family: 'Montserrat';
-                font-size: 12px;
+                background-color: #f7f7f7;
+                border: 1px solid #bbb;
+                font-family: 'Montserrat Bold';
+                font-size: 14px;
+                min-width: 25px;
+                max-width: 25px;
+                height: 25px;
             }
             QPushButton:hover { background-color: #e0e0e0; }
         """)
@@ -340,10 +435,15 @@ class App(QMainWindow):
         self.wheel_number_label.setAlignment(Qt.AlignCenter)
         self.wheel_number_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat';
-                font-size: 14px;
-                font-weight: bold;
-                min-width: 30px;
+                font-family: 'Montserrat Black';
+                font-size: 16px;
+                color: #111;
+                min-width: 32px;
+                min-height: 25px;
+                background-color: #fff;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                text-align: center;
             }
         """)
         
@@ -351,10 +451,13 @@ class App(QMainWindow):
         self.wheel_increment.setFixedSize(25, 25)
         self.wheel_increment.setStyleSheet("""
             QPushButton {
-                background-color: #f0f0f0;
-                border: 1px solid #ccc;
-                font-family: 'Montserrat';
-                font-size: 12px;
+                background-color: #f7f7f7;
+                border: 1px solid #bbb;
+                font-family: 'Montserrat Bold';
+                font-size: 14px;
+                min-width: 25px;
+                max-width: 25px;
+                height: 25px;
             }
             QPushButton:hover { background-color: #e0e0e0; }
         """)
@@ -384,7 +487,7 @@ class App(QMainWindow):
                 color: black;
                 font-family: 'Montserrat Black';
                 font-size: 20px;
-                padding-bottom: 5px;
+                padding-bottom: 2px;
                 border-bottom: 1px solid #eee;
             }
         """)
@@ -395,28 +498,25 @@ class App(QMainWindow):
             QLabel {
                 color: black;
                 font-family: 'Montserrat ExtraBold';
-                font-size: 18px;
-                padding: 15px 0;
+                font-size: 15px;
+                padding-top: 2px;
+                padding-bottom: 0px;
             }
         """)
-        
-        # Analyzing animation setup
-        self.analyzing_animation_timer = QTimer()
-        self.analyzing_dots = 0
-        self.max_dots = 3
-        
+
         self.analyzing_label = QLabel("ANALYZING")
         self.analyzing_label.setAlignment(Qt.AlignCenter)
         self.analyzing_label.setStyleSheet("""
             QLabel {
                 color: black;
                 font-family: 'Montserrat ExtraBold';
-                font-size: 18px;
-                padding: 15px 0;
+                font-size: 15px;
+                padding-top: 0px;
+                padding-bottom: 0px;
             }
         """)
         self.analyzing_label.hide()
-        
+
         self.recommendation_indicator = QLabel()
         self.recommendation_indicator.setAlignment(Qt.AlignCenter)
         self.recommendation_indicator.setStyleSheet("""
@@ -424,19 +524,20 @@ class App(QMainWindow):
                 color: #666;
                 font-family: 'Montserrat';
                 font-size: 14px;
-                padding: 10px 0;
+                padding-top: 0px;
+                padding-bottom: 0px;
             }
         """)
-        
-        # Wheel diameter measurement
+
         self.diameter_label = QLabel("Wheel Diameter: -")
         self.diameter_label.setAlignment(Qt.AlignCenter)
         self.diameter_label.setStyleSheet("""
             QLabel {
                 color: #333;
                 font-family: 'Montserrat';
-                font-size: 16px;
-                padding: 5px 0;
+                font-size: 14px;
+                padding-top: 0px;
+                padding-bottom: 0px;
             }
         """)
         self.diameter_label.hide()
@@ -506,6 +607,7 @@ class App(QMainWindow):
         
         self.setup_animations()
         self.setup_camera_thread()
+        self.setup_distance_sensor()
         self.connect_signals()
         self.setup_number_controls()
 
@@ -543,6 +645,14 @@ class App(QMainWindow):
         self.camera_thread.enable_buttons_signal.connect(self.set_buttons_enabled)
         self.camera_thread.start()
 
+    def setup_distance_sensor(self):
+        self.distance_sensor_thread = DistanceSensorThread()
+        self.distance_sensor_thread.distance_measured.connect(self.update_distance)
+        self.distance_sensor_thread.start()
+
+    def update_distance(self, distance):
+        self.current_distance = distance
+
     def connect_signals(self):
         self.start_btn.clicked.connect(self.start_test)
 
@@ -559,32 +669,17 @@ class App(QMainWindow):
             Qt.KeepAspectRatio, Qt.SmoothTransformation
         ))
 
-    def show_analyzing_animation(self):
-        self.analyzing_label.show()
-        self.analyzing_dots = 0
-        self.analyzing_animation_timer.timeout.connect(self.update_analyzing_text)
-        self.analyzing_animation_timer.start(500)
-        self.status_indicator.hide()
-        self.diameter_label.hide()
-
-    def hide_analyzing_animation(self):
-        self.analyzing_animation_timer.stop()
-        self.analyzing_label.hide()
-        self.status_indicator.show()
-
     def update_analyzing_text(self):
         self.analyzing_dots = (self.analyzing_dots + 1) % (self.max_dots + 1)
         dots = "." * self.analyzing_dots
         self.analyzing_label.setText(f"ANALYZING{dots}")
 
     def update_status(self, status, recommendation):
-        if status == "ANALYZING...":
-            self.show_analyzing_animation()
-        else:
-            self.hide_analyzing_animation()
-            # Show diameter measurement after analysis is complete
-            self.diameter_label.setText("Wheel Diameter: 680 mm")
+        if status in ["FLAW DETECTED", "NO FLAW"]:
+            self.diameter_label.setText(f"Wheel Diameter: {self.current_distance} mm")
             self.diameter_label.show()
+        else:
+            self.diameter_label.hide()
             
         self.status_indicator.setText(status)
         self.recommendation_indicator.setText(recommendation)
@@ -795,6 +890,7 @@ class App(QMainWindow):
 
     def closeEvent(self, event):
         self.camera_thread.stop()
+        self.distance_sensor_thread.stop()
         event.accept()
 
 
