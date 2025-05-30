@@ -200,7 +200,7 @@ class CameraThread(QThread):
 
     def start_test(self):
         self.diameter_btn.setEnabled(False)
-        
+                
         self.status_indicator.setText("ANALYZING...")
         self.status_indicator.setStyleSheet("""
             QLabel {
@@ -676,7 +676,6 @@ class App(QMainWindow):
         """)
 
         self.diameter_btn = QPushButton("MEASURE DIAMETER")
-        self.diameter_btn.setEnabled(False)
         self.diameter_btn.setCursor(Qt.PointingHandCursor)
         self.diameter_btn.setStyleSheet("""
             QPushButton {
@@ -944,7 +943,7 @@ class App(QMainWindow):
 
     def start_test(self):
         self.diameter_btn.setEnabled(False)
-        
+                
         self.status_indicator.setText("ANALYZING...")
         self.status_indicator.setStyleSheet("""
             QLabel {
@@ -963,10 +962,7 @@ class App(QMainWindow):
         self.diameter_label.hide()
 
         # Run ToF sensor one-time read
-        self.sensor_thread = DistanceSensorThread()
-        self.sensor_thread.distance_measured.connect(self.update_distance)
-        self.sensor_thread.finished.connect(self.camera_thread.start_test)
-        self.sensor_thread.start()
+        self.camera_thread.start_test()
 
         self.status_indicator.setText("ANALYZING...")
         self.status_indicator.setStyleSheet("""
