@@ -219,7 +219,7 @@ class CameraThread(QThread):
         # Run ToF sensor one-time read
         self.sensor_thread = DistanceSensorThread()
         self.sensor_thread.distance_measured.connect(self.update_distance)
-        self.sensor_thread.finished.connect(self.run_model_test)
+        self.sensor_thread.finished.connect(self.camera_thread.start_test)
         self.sensor_thread.start()
 
         if self.model is None:
@@ -232,9 +232,6 @@ class CameraThread(QThread):
         self.countdown_timer.start(500)
 
     
-    def run_model_test(self):
-        self.camera_thread.start_test()
-
     def update_countdown(self):
         self._countdown = -1
         self.countdown_timer.stop()
@@ -661,6 +658,21 @@ class App(QMainWindow):
         self.button_layout.setContentsMargins(20, 20, 20, 20)
         
         self.start_btn = QPushButton("START INSPECTION")
+        self.diameter_btn = QPushButton("MEASURE DIAMETER")
+        self.diameter_btn.setCursor(Qt.PointingHandCursor)
+        self.diameter_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #333;
+                color: white;
+                border: none;
+                padding: 12px;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 14px;
+                border-radius: 4px;
+            }
+            QPushButton:hover { background-color: #111; }
+            QPushButton:pressed { background-color: #000; }
+        """)
         self.start_btn.setCursor(Qt.PointingHandCursor)
         self.start_btn.setStyleSheet("""
             QPushButton {
@@ -695,6 +707,7 @@ class App(QMainWindow):
             QPushButton:disabled { background-color: #ccc; color: #666; }
         """)
         
+        self.button_layout.addWidget(self.diameter_btn)
         self.button_layout.addWidget(self.start_btn)
         self.button_layout.addWidget(self.save_btn)
         self.button_panel.setLayout(self.button_layout)
@@ -757,6 +770,7 @@ class App(QMainWindow):
         self.current_distance = distance
 
     def connect_signals(self):
+        self.diameter_btn.clicked.connect(self.measure_diameter)
         self.start_btn.clicked.connect(self.start_test)
 
     def set_buttons_enabled(self, enabled):
@@ -899,7 +913,7 @@ class App(QMainWindow):
         # Run ToF sensor one-time read
         self.sensor_thread = DistanceSensorThread()
         self.sensor_thread.distance_measured.connect(self.update_distance)
-        self.sensor_thread.finished.connect(self.run_model_test)
+        self.sensor_thread.finished.connect(self.camera_thread.start_test)
         self.sensor_thread.start()
 
         self.status_indicator.setText("ANALYZING...")
@@ -920,6 +934,12 @@ class App(QMainWindow):
         self.diameter_label.hide()
         self.camera_thread.start_test()
 
+    
+    def measure_diameter(self):
+        self.distance_sensor_thread = DistanceSensorThread()
+        self.distance_sensor_thread.distance_measured.connect(self.update_distance)
+        self.distance_sensor_thread.start()
+    
     def reset_app(self):
         self.start_btn.setText("START INSPECTION")
         self.start_btn.setEnabled(True)
@@ -957,7 +977,7 @@ class App(QMainWindow):
         self.test_image = image
         self.test_status = status
         self.test_recommendation = recommendation
-        self.save_btn.setEnabled(True)
+        self.save_btn.setEnabled(self.current_distance > 0)
         self.start_btn.setText("RESET")
         self.start_btn.disconnect()
         self.start_btn.clicked.connect(self.reset_app)
@@ -1041,6 +1061,6 @@ if __name__ == "__main__":
     window = App()
     window.show()
     sys.exit(app.exec_())
-
     def run_model_test(self):
+        self.camera_thread.start_test()
         self.camera_thread.start_test()
