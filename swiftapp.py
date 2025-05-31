@@ -700,7 +700,7 @@ class App(QMainWindow):
         """)
         
         
-                        self.button_layout.addStretch()
+        self.button_layout.addStretch()
         self.button_panel.setLayout(self.button_layout)
         
         self.control_layout.addWidget(self.status_panel)
