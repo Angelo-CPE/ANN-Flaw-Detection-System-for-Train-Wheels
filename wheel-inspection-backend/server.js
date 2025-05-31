@@ -80,8 +80,21 @@ const upload = multer({
 
 // Report Schema and Model
 const reportSchema = new mongoose.Schema({
-  timestamp: { type: Date, required: true },
-  name: { type: String, default: 'Untitled Report' },
+  timestamp: { type: Date, default: Date.now },
+  status: { 
+    type: String, 
+    required: true, 
+    enum: ['NO FLAW', 'FLAW DETECTED'],
+    validate: {
+      validator: function(v) {
+        return ['NO FLAW', 'FLAW DETECTED'].includes(v);
+      },
+      message: props => `${props.value} is not a valid status!`
+    }
+  },
+  recommendation: { type: String },
+  image_path: { type: String, required: true },
+  name: { type: String },
   trainNumber: { type: String, required: true },
   compartmentNumber: { type: String, required: true },
   wheelNumber: { type: String, required: true },
@@ -89,10 +102,16 @@ const reportSchema = new mongoose.Schema({
 });
 
 reportSchema.pre('save', function(next) {
-  this.recommendation = this.status === 'FLAW DETECTED' 
-    ? 'For Repair/Replacement' 
-    : 'For Constant Monitoring';
-  this.name = `Flaw Inspection T${this.trainNumber}-C${this.compartmentNumber}-W${this.wheelNumber}`;
+  // Only set recommendation if not provided
+  if (!this.recommendation) {
+    this.recommendation = this.status === 'FLAW DETECTED' 
+      ? 'For Repair/Replacement' 
+      : 'For Constant Monitoring';
+  }
+  // Only set name if not provided
+  if (!this.name) {
+    this.name = `Train ${this.trainNumber} - Compartment ${this.compartmentNumber} - Wheel ${this.wheelNumber}`;
+  }
   next();
 });
 
@@ -137,37 +156,42 @@ app.get('/test', (req, res) => {
 
 app.post('/api/reports', upload.single('image'), async (req, res) => {
   try {
-    console.log('Request Body:', req.body);
-    console.log('Uploaded File:', req.file);
-
     const { 
       trainNumber, 
       compartmentNumber, 
       wheelNumber, 
       status,
+      recommendation,
+      name,
       wheel_diameter 
     } = req.body;
     
-    if (!trainNumber || !compartmentNumber || !wheelNumber || !wheel_diameter || !req.file) {
+    // Validate required fields
+    if (!trainNumber || !compartmentNumber || !wheelNumber || 
+        !wheel_diameter || !status || !req.file) {
       if (req.file) fs.unlinkSync(req.file.path);
       return res.status(400).json({ 
         error: 'Missing required fields',
-        required: ['trainNumber', 'compartmentNumber', 'wheelNumber', 'wheel_diameter', 'image']
+        required: ['trainNumber', 'compartmentNumber', 'wheelNumber', 
+                  'wheel_diameter', 'status', 'image']
       });
     }
 
+    // Validate status
+    if (!['NO FLAW', 'FLAW DETECTED'].includes(status)) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'Invalid status value' });
+    }
+
     const report = new Report({
-      timestamp: new Date(),
       trainNumber,
       compartmentNumber,
       wheelNumber,
       wheel_diameter,
-      status: status || 'NO FLAW',
+      status,
       recommendation,
       name,
-      notes,
-      image_path: `/uploads/${req.file.filename}`,
-      wheel_diameter
+      image_path: `/uploads/${req.file.filename}`
     });
 
     await report.save();

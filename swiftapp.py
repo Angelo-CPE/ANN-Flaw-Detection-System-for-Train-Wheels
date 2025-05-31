@@ -22,10 +22,15 @@ except ImportError:
     print("VL53L0X library not found. Distance measurement will be simulated.")
     VL53L0X = None
 
-def send_report_to_backend(status, recommendation, image_base64, name=None, notes="", trainNumber=None, compartmentNumber=None, wheelNumber=None, wheel_diameter=None):
-    import tempfile
+def send_report_to_backend(status, recommendation, image_base64, name=None, trainNumber=None, compartmentNumber=None, wheelNumber=None, wheel_diameter=None):
+    # Validate status before sending
+    if status not in ["FLAW DETECTED", "NO FLAW"]:
+        print("Invalid status, defaulting to 'NO FLAW'")
+        status = "NO FLAW"
+        recommendation = "For Constant Monitoring"
 
-    backend_url = "https://ann-flaw-detection-system-for-train.onrender.com"  # Change if hosted elsewhere
+    import tempfile
+    backend_url = "https://ann-flaw-detection-system-for-train.onrender.com"
 
     try:
         # Create a temporary image file from base64
@@ -42,7 +47,6 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, note
                 'status': status,
                 'recommendation': recommendation,
                 'name': name,
-                'notes': notes,
                 'trainNumber': str(trainNumber),
                 'compartmentNumber': str(compartmentNumber),
                 'wheelNumber': str(wheelNumber),
@@ -907,6 +911,11 @@ class App(QMainWindow):
         self.reset_btn.setVisible(True)
 
     def handle_test_complete(self, image, status, recommendation):
+        # Ensure status is valid
+        if status not in ["FLAW DETECTED", "NO FLAW"]:
+            status = "NO FLAW"
+            recommendation = "For Constant Monitoring"
+        
         self.test_image = image
         self.test_status = status
         self.test_recommendation = recommendation
