@@ -61,9 +61,6 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, note
         if os.path.exists(temp_img_path):
             os.remove(temp_img_path)
 
-
-
-
 class DistanceSensorThread(QThread):
     distance_measured = pyqtSignal(int)
     measurement_complete = pyqtSignal()
@@ -96,17 +93,14 @@ class DistanceSensorThread(QThread):
         self._run_flag = False
         self.wait()
 
-
-
-
 class ANNModel(nn.Module):
     def __init__(self, input_size):
         super(ANNModel, self).__init__()
-        self.fc1 = nn.Linear(input_size, 256)  # Updated to match saved model
+        self.fc1 = nn.Linear(input_size, 256)
         self.dropout1 = nn.Dropout(0.2)
         self.fc2 = nn.Linear(256, 128)
         self.fc3 = nn.Linear(128, 64)
-        self.fc4 = nn.Linear(64, 2)  # Added to match saved model
+        self.fc4 = nn.Linear(64, 2)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
@@ -140,7 +134,6 @@ class CameraThread(QThread):
             if os.path.exists(model_path):
                 self.model.load_state_dict(torch.load(model_path, map_location=self.device))
                 self.model.eval()
-                # Freeze model parameters
                 for param in self.model.parameters():
                     param.requires_grad = False
                 print("ANN model loaded successfully")
@@ -151,16 +144,15 @@ class CameraThread(QThread):
             self.model = None
 
     def unload_model(self):
-        """Unload the model to free up memory"""
         if hasattr(self, 'model') and self.model is not None:
             del self.model
             self.model = None
-            torch.cuda.empty_cache()  # Clear CUDA cache if using GPU
+            torch.cuda.empty_cache()
             print("Model unloaded successfully")
 
     def preprocess_image(self, frame):
         try:
-            frame_gray = cv2.cvtColor(cv2.resize(frame, (96, 96)), cv2.COLOR_BGR2GRAY)  # Reduced size
+            frame_gray = cv2.cvtColor(cv2.resize(frame, (96, 96)), cv2.COLOR_BGR2GRAY)
             hog_features = hog(frame_gray, pixels_per_cell=(16, 16), cells_per_block=(1, 1), visualize=False)
             signal = np.mean(frame_gray, axis=0)
             analytic_signal = hilbert(signal)
@@ -217,9 +209,7 @@ class CameraThread(QThread):
         finally:
             self.enable_buttons_signal.emit(True)
 
-    
     def run(self):
-        # Optimized GStreamer pipeline for Jetson Nano at 20 FPS
         pipeline = (
             "nvarguscamerasrc ! "
             "video/x-raw(memory:NVMM), width=640, height=480, "
@@ -283,7 +273,7 @@ class App(QMainWindow):
         self.trainNumber = 1
         self.compartmentNumber = 1
         self.wheelNumber = 1
-        self.current_distance = 680  # Default value
+        self.current_distance = 680
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
@@ -631,6 +621,10 @@ class App(QMainWindow):
             }
             QPushButton:hover { background-color: #cc0000; }
             QPushButton:pressed { background-color: #b30000; }
+            QPushButton:disabled {
+                background-color: #888;
+                color: #ccc;
+            }
         """)
         
         # 2. Measure Diameter Button
@@ -658,6 +652,7 @@ class App(QMainWindow):
         # 3. Save Report Button
         self.save_btn = QPushButton("SAVE REPORT")
         self.save_btn.setEnabled(False)
+        self.save_btn.setVisible(False)
         self.save_btn.setCursor(Qt.PointingHandCursor)
         self.save_btn.setStyleSheet("""
             QPushButton {
@@ -677,13 +672,6 @@ class App(QMainWindow):
             QPushButton:pressed { background-color: #002200; }
         """)
         
-        self.button_layout.addWidget(self.detect_btn)
-        self.button_layout.addWidget(self.measure_btn)
-        self.save_btn.setVisible(False)
-        self.button_layout.addWidget(self.save_btn)
-        self.button_layout.insertStretch(0, 1)
-        self.button_layout.addStretch(1)
-        
         # 4. Reset Button
         self.reset_btn = QPushButton("RESET")
         self.reset_btn.setVisible(False)
@@ -701,14 +689,13 @@ class App(QMainWindow):
             QPushButton:hover { background-color: #222; }
             QPushButton:pressed { background-color: #111; }
         """)
-        self.button_layout.addWidget(self.reset_btn)
-
         
-        self.button_layout.addWidget(self.reset_btn)
+        self.button_layout.addWidget(self.detect_btn)
+        self.button_layout.addWidget(self.measure_btn)
         self.button_layout.addWidget(self.save_btn)
-        self.button_layout.insertStretch(0, 1)
+        self.button_layout.addWidget(self.reset_btn)
         self.button_layout.addStretch(1)
-        self.button_layout.addStretch()
+        
         self.button_panel.setLayout(self.button_layout)
         
         self.control_layout.addWidget(self.status_panel)
@@ -733,7 +720,6 @@ class App(QMainWindow):
         self.compartment_increment.clicked.connect(lambda: self.update_number('compartment', 1))
         self.wheel_decrement.clicked.connect(lambda: self.update_number('wheel', -1))
         self.wheel_increment.clicked.connect(lambda: self.update_number('wheel', 1))
-        pass
 
     def update_number(self, number_type, change):
         if number_type == 'train':
@@ -745,13 +731,6 @@ class App(QMainWindow):
         elif number_type == 'wheel':
             self.wheelNumber = max(1, min(8, self.wheelNumber + change))
             self.wheelNumber_label.setText(str(self.wheelNumber))
-        pass
-
-    def setup_animations(self):
-        self.status_animation = QPropertyAnimation(self.status_indicator, b"windowOpacity")
-        self.status_animation.setDuration(300)
-        self.status_animation.setStartValue(0.7)
-        self.status_animation.setEndValue(1.0)
 
     def setup_animations(self):
         self.status_animation = QPropertyAnimation(self.status_indicator, b"windowOpacity")
@@ -776,9 +755,6 @@ class App(QMainWindow):
         self.reset_btn.setVisible(True)
         self.save_btn.setVisible(True)
         self.diameter_label.show()
-        self.detect_btn.setEnabled(False)
-        self.measure_btn.setEnabled(True)  # Re-enable measure button after measurement
-        self.save_btn.setEnabled(True)  # Enable save button after measurement
 
     def connect_signals(self):
         self.detect_btn.clicked.connect(self.detect_flaws)
@@ -830,22 +806,6 @@ class App(QMainWindow):
                     padding: 15px 0;
                 }
             """)
-            self.recommendation_indicator.setStyleSheet("""
-                QLabel {
-                    color: black;
-                    font-family: 'Montserrat';
-                    font-size: 14px;
-                    padding: 10px 0;
-                }
-            """)
-            self.diameter_label.setStyleSheet("""
-                QLabel {
-                    color: #333;
-                    font-family: 'Montserrat';
-                    font-size: 16px;
-                    padding: 5px 0;
-                }
-            """)
             self.camera_label.setStyleSheet("""
                 QLabel {
                     background: black;
@@ -861,22 +821,6 @@ class App(QMainWindow):
                     padding: 15px 0;
                 }
             """)
-            self.recommendation_indicator.setStyleSheet("""
-                QLabel {
-                    color: black;
-                    font-family: 'Montserrat';
-                    font-size: 14px;
-                    padding: 10px 0;
-                }
-            """)
-            self.diameter_label.setStyleSheet("""
-                QLabel {
-                    color: #333;
-                    font-family: 'Montserrat';
-                    font-size: 16px;
-                    padding: 5px 0;
-                }
-            """)
             self.camera_label.setStyleSheet("""
                 QLabel {
                     background: black;
@@ -890,22 +834,6 @@ class App(QMainWindow):
                     font-family: 'Montserrat ExtraBold';
                     font-size: 18px;
                     padding: 15px 0;
-                }
-            """)
-            self.recommendation_indicator.setStyleSheet("""
-                QLabel {
-                    color: #666;
-                    font-family: 'Montserrat';
-                    font-size: 14px;
-                    padding: 10px 0;
-                }
-            """)
-            self.diameter_label.setStyleSheet("""
-                QLabel {
-                    color: #333;
-                    font-family: 'Montserrat';
-                    font-size: 16px;
-                    padding: 5px 0;
                 }
             """)
             self.camera_label.setStyleSheet("""
@@ -935,7 +863,7 @@ class App(QMainWindow):
         """)
         self.diameter_label.hide()
         
-        # Disable all buttons during processing
+        # Immediately disable the button for visual feedback
         self.detect_btn.setEnabled(False)
         self.measure_btn.setEnabled(False)
         self.save_btn.setEnabled(False)
@@ -943,7 +871,6 @@ class App(QMainWindow):
         self.camera_thread.start_test()
 
     def measure_diameter(self):
-        # self.status_indicator.setText("MEASURING DIAMETER...")  # Removed to preserve flaw detection status
         self.diameter_label.setText("Measuring...")
         self.diameter_label.show()
 
@@ -969,49 +896,32 @@ class App(QMainWindow):
 
     def on_measurement_error(self, error_msg):
         print(f"Measurement error: {error_msg}")
-        # You could show the error to the user if desired
-        # For now, we'll just use the default value (680)
         self.on_measurement_complete()
 
-    def update_distance(self, distance):
-        self.current_distance = distance
-        self.diameter_label.setText(f"Wheel Diameter: {distance} mm")
+    def on_measurement_complete(self):
+        # After measurement, show Reset and Save buttons
         self.detect_btn.setVisible(False)
         self.measure_btn.setVisible(False)
-        self.reset_btn.setVisible(True)
+        self.save_btn.setEnabled(True)
         self.save_btn.setVisible(True)
+        self.reset_btn.setVisible(True)
 
-    def on_measurement_complete(self):
-        # Re-enable buttons
-        # self.detect_btn.setEnabled(False)  # Removed from reset to allow re-detect
-        self.detect_btn.setEnabled(False)
-        self.measure_btn.setEnabled(True)
-        
-        # Only enable save if we have both test result and measurement
-        if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
-            self.save_btn.setEnabled(True)
-        
-        # Update status if we have a test result
-        if hasattr(self, 'test_status'):
-            self.status_indicator.setText(self.test_status)
-        else:
-            self.status_indicator.setText("READY")
-
-    
     def handle_test_complete(self, image, status, recommendation):
         self.test_image = image
         self.test_status = status
         self.test_recommendation = recommendation
 
-        # Enable measure button after flaw detection
+        # After detection, show:
+        # - Detect Flaws (disabled)
+        # - Measure Diameter (enabled)
         self.detect_btn.setEnabled(False)
-        self.detect_btn.setVisible(False)
+        self.detect_btn.setVisible(True)
         self.measure_btn.setEnabled(True)
-        self.save_btn.setEnabled(False)  # Still need measurement before saving
+        self.measure_btn.setVisible(True)
+        self.save_btn.setEnabled(False)
+        self.save_btn.setVisible(False)
+        self.reset_btn.setVisible(False)
 
-        # Unload the model after displaying results
-        self.camera_thread.unload_model()
-# FIXED: moved save_report inside App
     def save_report(self):
         msg = QMessageBox()
         msg.setWindowTitle("Save Report")
@@ -1060,142 +970,69 @@ class App(QMainWindow):
                 wheelNumber=self.wheelNumber,
                 wheel_diameter=self.current_distance
             )
-        
-        # Reset UI after saving
-        self.reset_ui()
-        
-        # Enable measure button after flaw detection
-        # self.detect_btn.setEnabled(False)  # Removed from reset to allow re-detect
-        self.detect_btn.setEnabled(False)
-        self.measure_btn.setEnabled(True)
-        self.save_btn.setEnabled(False)  # Still need measurement before saving
-        
-        # Unload the model after displaying results
-        self.camera_thread.unload_model()
+            
+            # Only reset if save was successful
+            self.reset_ui()
 
     def reset_ui(self):
-            self.status_indicator.setText("READY")
-            self.recommendation_indicator.setText("")
-            self.diameter_label.setText("Wheel Diameter: -")
-            self.diameter_label.hide()
-            self.status_indicator.setStyleSheet("""
-                QLabel {
-                    color: black;
-                    font-family: 'Montserrat ExtraBold';
-                    font-size: 18px;
-                    padding: 15px 0;
-                }
-            """)
-            self.recommendation_indicator.setStyleSheet("""
-                QLabel {
-                    color: #666;
-                    font-family: 'Montserrat';
-                    font-size: 14px;
-                    padding: 10px 0;
-                }
-            """)
-            self.camera_label.setStyleSheet("""
-                QLabel {
-                    background: black;
-                    border: none;
-                }
-            """)
+        self.status_indicator.setText("READY")
+        self.recommendation_indicator.setText("")
+        self.diameter_label.setText("Wheel Diameter: -")
+        self.diameter_label.hide()
+        self.status_indicator.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 18px;
+                padding: 15px 0;
+            }
+        """)
+        self.recommendation_indicator.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-family: 'Montserrat';
+                font-size: 14px;
+                padding: 10px 0;
+            }
+        """)
+        self.camera_label.setStyleSheet("""
+            QLabel {
+                background: black;
+                border: none;
+            }
+        """)
         
-            # Reset buttons
-            self.detect_btn.setEnabled(True)
-            self.detect_btn.setVisible(True)
-            self.measure_btn.setEnabled(False)
-            self.measure_btn.setVisible(True)
-            self.save_btn.setEnabled(False)
-            self.save_btn.setVisible(False)
-            self.reset_btn.setVisible(False)
+        # Reset buttons to initial state
+        self.detect_btn.setEnabled(True)
+        self.detect_btn.setVisible(True)
+        self.measure_btn.setEnabled(False)
+        self.measure_btn.setVisible(True)
+        self.save_btn.setEnabled(False)
+        self.save_btn.setVisible(False)
+        self.reset_btn.setVisible(False)
 
-            self.detect_btn.setEnabled(True)
-            self.detect_btn.setVisible(True)
-            self.measure_btn.setEnabled(False)
-            self.measure_btn.setVisible(True)
-            self.save_btn.setEnabled(False)
-            self.save_btn.setVisible(False)
-            self.reset_btn.setVisible(False)
+        # Reset data
+        self.current_distance = 680
+        self.test_image = None
+        self.test_status = None
+        self.test_recommendation = None
+        
+        # Reload the model for next use
+        self.camera_thread.load_model()
 
-            self.detect_btn.setEnabled(True)
-            self.detect_btn.setVisible(True)
-            self.measure_btn.setEnabled(False)
-            self.measure_btn.setVisible(True)
-            self.save_btn.setEnabled(False)
-            self.save_btn.setVisible(True)
-            self.reset_btn.setVisible(False)
-
-            # self.detect_btn.setEnabled(False)  # Removed from reset to allow re-detect
-            self.measure_btn.setEnabled(False)
-            self.save_btn.setEnabled(False)
-            
-            # Reset data
-            self.current_distance = 680
-            self.test_image = None
-            self.test_status = None
-            self.test_recommendation = None
-            
-            # Reload the model for next use
-            self.camera_thread.load_model()
-
-    
-            def reset_ui(self):
-                self.status_indicator.setText("READY")
-                self.recommendation_indicator.setText("")
-                self.diameter_label.setText("Wheel Diameter: -")
-                self.diameter_label.hide()
-                self.status_indicator.setStyleSheet("""
-                    QLabel {
-                        color: black;
-                        font-family: 'Montserrat ExtraBold';
-                        font-size: 18px;
-                        padding: 15px 0;
-                    }
-                """)
-                self.recommendation_indicator.setStyleSheet("""
-                    QLabel {
-                        color: #666;
-                        font-family: 'Montserrat';
-                        font-size: 14px;
-                        padding: 10px 0;
-                    }
-                """)
-                self.camera_label.setStyleSheet("""
-                    QLabel {
-                        background: black;
-                        border: none;
-                    }
-                """)
-                self.detect_btn.setEnabled(True)
-                self.detect_btn.setVisible(True)
-                self.measure_btn.setEnabled(False)
-                self.measure_btn.setVisible(True)
-                self.save_btn.setEnabled(False)
-                self.save_btn.setVisible(False)
-                self.reset_btn.setVisible(False)
-
-                self.current_distance = 680
-                self.test_image = None
-                self.test_status = None
-                self.test_recommendation = None
-                self.camera_thread.load_model()
-
-            def closeEvent(self, event):
-                self.camera_thread.stop()
-                if hasattr(self, 'sensor_thread'):
-                    self.sensor_thread.stop()
-                event.accept()
+    def closeEvent(self, event):
+        self.camera_thread.stop()
+        if hasattr(self, 'sensor_thread'):
+            self.sensor_thread.stop()
+        event.accept()
 
 if __name__ == "__main__":
-    # Reduce memory usage by disabling unnecessary features
     os.environ["QT_QUICK_BACKEND"] = "software"
     os.environ["QT_QPA_PLATFORM"] = "xcb"
     
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     
-    # Simplified palette
     palette = app.palette()
     palette.setColor(palette.Window, QColor(255, 255, 255))
     palette.setColor(palette.WindowText, QColor(0, 0, 0))
@@ -1205,9 +1042,8 @@ if __name__ == "__main__":
     window = App()
     window.show()
     
-    # Set process priority
     try:
-        os.nice(10)  # Lower priority to avoid hogging resources
+        os.nice(10)
     except:
         pass
     
