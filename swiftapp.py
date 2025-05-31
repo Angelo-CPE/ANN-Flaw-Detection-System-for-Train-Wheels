@@ -1011,7 +1011,8 @@ class App(QMainWindow):
 
         # Unload the model after displaying results
         self.camera_thread.unload_model()
-def save_report(self):
+# FIXED: moved save_report inside App
+    def save_report(self):
         msg = QMessageBox()
         msg.setWindowTitle("Save Report")
         msg.setText("Save this inspection report?")
@@ -1072,7 +1073,7 @@ def save_report(self):
         # Unload the model after displaying results
         self.camera_thread.unload_model()
 
-        def reset_ui(self):
+    def reset_ui(self):
             self.status_indicator.setText("READY")
             self.recommendation_indicator.setText("")
             self.diameter_label.setText("Wheel Diameter: -")
