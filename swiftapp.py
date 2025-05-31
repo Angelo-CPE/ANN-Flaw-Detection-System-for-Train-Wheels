@@ -316,7 +316,7 @@ class App(QMainWindow):
         self.camera_layout.addWidget(self.camera_label)
         self.camera_panel.setFixedHeight(480)
         self.camera_layout.setAlignment(Qt.AlignCenter)
-        self.camera_panel.setFixedSize(480, 360)
+        self.camera_panel.setFixedSize(640, 480)
         self.camera_layout.setAlignment(Qt.AlignCenter)
         self.camera_panel.setLayout(self.camera_layout)
         
@@ -680,7 +680,7 @@ class App(QMainWindow):
         self.button_layout.addWidget(self.detect_btn)
         self.button_layout.addWidget(self.measure_btn)
         self.save_btn.setVisible(False)
-                                
+                
         # 4. Reset Button
         self.reset_btn = QPushButton("RESET")
         self.reset_btn.setVisible(False)
@@ -700,11 +700,7 @@ class App(QMainWindow):
         """)
         
         
-        self.button_layout.addWidget(self.detect_btn)
-        self.button_layout.addWidget(self.measure_btn)
-        self.button_layout.addWidget(self.reset_btn)
-        self.button_layout.addWidget(self.save_btn)
-        self.button_layout.addStretch()
+                        self.button_layout.addStretch()
         self.button_panel.setLayout(self.button_layout)
         
         self.control_layout.addWidget(self.status_panel)
@@ -1044,6 +1040,7 @@ class App(QMainWindow):
         # Reset UI after saving
         self.reset_ui()
 
+    
     def reset_ui(self):
         self.status_indicator.setText("READY")
         self.recommendation_indicator.setText("")
@@ -1071,8 +1068,6 @@ class App(QMainWindow):
                 border: none;
             }
         """)
-        
-        # Reset buttons
         self.detect_btn.setEnabled(True)
         self.detect_btn.setVisible(True)
         self.measure_btn.setEnabled(False)
@@ -1081,31 +1076,11 @@ class App(QMainWindow):
         self.save_btn.setVisible(False)
         self.reset_btn.setVisible(False)
 
-        self.detect_btn.setEnabled(True)
-        self.detect_btn.setVisible(True)
-        self.measure_btn.setEnabled(False)
-        self.measure_btn.setVisible(True)
-        self.save_btn.setEnabled(False)
-        self.save_btn.setVisible(False)
-        self.reset_btn.setVisible(False)
-
-        self.detect_btn.setEnabled(True)
-        self.detect_btn.setVisible(True)
-        self.measure_btn.setEnabled(False)
-        self.measure_btn.setVisible(True)
-        self.save_btn.setEnabled(False)
-        self.save_btn.setVisible(True)
-        self.reset_btn.setVisible(False)
-
-        # self.detect_btn.setEnabled(False)  # Removed from reset to allow re-detect
-        self.measure_btn.setEnabled(False)
-        self.save_btn.setEnabled(False)
-        
-        # Reset data
         self.current_distance = 680
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
+        self.camera_thread.load_model()
 
     def handle_test_complete(self, image, status, recommendation):
         self.test_image = image
