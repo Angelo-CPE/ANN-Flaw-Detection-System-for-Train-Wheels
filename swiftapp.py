@@ -76,37 +76,63 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
         if os.path.exists(temp_img_path):
             os.remove(temp_img_path)
 
+
 class DistanceSensorThread(QThread):
     distance_measured = pyqtSignal(int)
     measurement_complete = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, tof):
+    def __init__(self, port='/dev/ttyACM0', baudrate=9600):
         super().__init__()
         self._run_flag = True
-        self.tof = tof
+        self.port = port
+        self.baudrate = baudrate
 
     def run(self):
         try:
-            start_time = time.time()
-            while time.time() - start_time < 1.0 and self._run_flag:
-                distance = self.tof.get_distance()
-                if distance > 0:
-                    self.distance_measured.emit(distance)
-                time.sleep(0.05)
+            import serial
+            with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
+                print(f"Connected to {self.port} at {self.baudrate} baud")
+                
+                # Clear any existing data in buffers
+                ser.reset_input_buffer()
+                ser.reset_output_buffer()
+                
+                # Allow time for Arduino to initialize
+                time.sleep(2)
+                
+                # Send a trigger character if needed
+                ser.write(b'R')  # Request reading
+                
+                # Read with longer timeout (adjusted for 9600 baud)
+                start_time = time.time()
+                while time.time() - start_time < 4:  # Increased to 4 seconds for 9600 baud
+                    if ser.in_waiting:
+                        line = ser.readline().decode('ascii', errors='ignore').strip()
+                        if line:
+                            print(f"Received: {line}")
+                            try:
+                                distance = int(line)
+                                if 0 < distance < 2000:  # Valid range check
+                                    self.distance_measured.emit(distance)
+                                    self.measurement_complete.emit()
+                                    return
+                            except ValueError:
+                                continue  # Skip non-integer lines
+                
+                self.error_occurred.emit("No valid measurement received within timeout")
+                
+        except serial.SerialException as e:
+            self.error_occurred.emit(f"Serial port error: {str(e)}")
         except Exception as e:
-            self.error_occurred.emit(str(e))
+            self.error_occurred.emit(f"Unexpected error: {str(e)}")
         finally:
-            try:
-                self.tof.stop_ranging()
-                self.tof.close()
-            except Exception as e:
-                print(f"Sensor cleanup error: {e}")
             self.measurement_complete.emit()
 
     def stop(self):
         self._run_flag = False
         self.wait()
+
 
 class ANNModel(nn.Module):
     def __init__(self, input_size):
@@ -777,6 +803,26 @@ class App(QMainWindow):
         self.save_btn.clicked.connect(self.save_report)
         self.reset_btn.clicked.connect(self.reset_ui)
 
+    
+    def measure_diameter(self):
+        self.diameter_label.setText("Measuring...")
+        self.diameter_label.show()
+
+        self.detect_btn.setEnabled(False)
+        self.measure_btn.setEnabled(False)
+        self.save_btn.setEnabled(False)
+
+        # Ensure any previous thread is stopped
+        if hasattr(self, 'sensor_thread'):
+            self.sensor_thread.stop()
+            self.sensor_thread.wait()
+
+        self.sensor_thread = DistanceSensorThread(port="/dev/ttyACM0", baudrate=9600)
+        self.sensor_thread.distance_measured.connect(self.update_distance)
+        self.sensor_thread.measurement_complete.connect(self.on_measurement_complete)
+        self.sensor_thread.error_occurred.connect(self.on_measurement_error)
+        self.sensor_thread.start()
+
     def set_buttons_enabled(self, enabled):
         # Only enable measure button if we have a test result
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
@@ -885,32 +931,14 @@ class App(QMainWindow):
         
         self.camera_thread.start_test()
 
-    def measure_diameter(self):
-        self.diameter_label.setText("Measuring...")
-        self.diameter_label.show()
-
-        self.detect_btn.setEnabled(False)
-        self.measure_btn.setEnabled(False)
-        self.save_btn.setEnabled(False)
-
-        try:
-            self.tof = VL53L0X.VL53L0X()
-            self.tof.open()
-            time.sleep(0.1)
-            self.tof.start_ranging(VL53L0X.Vl53l0xAccuracyMode.GOOD)
-
-            self.sensor_thread = DistanceSensorThread(self.tof)
-            self.sensor_thread.distance_measured.connect(self.update_distance)
-            self.sensor_thread.measurement_complete.connect(self.on_measurement_complete)
-            self.sensor_thread.error_occurred.connect(self.on_measurement_error)
-            self.sensor_thread.start()
-
-        except Exception as e:
-            print(f"Sensor init error: {e}")
-            self.on_measurement_error("Sensor init error")
-
     def on_measurement_error(self, error_msg):
         print(f"Measurement error: {error_msg}")
+        QMessageBox.warning(self, "Measurement Error", 
+                          f"Could not measure distance: {error_msg}\n\n"
+                          "Please check:\n"
+                          "1. Arduino is connected\n"
+                          "2. Correct port is selected\n"
+                          "3. Sensor is properly wired")
         self.on_measurement_complete()
 
     def on_measurement_complete(self):
