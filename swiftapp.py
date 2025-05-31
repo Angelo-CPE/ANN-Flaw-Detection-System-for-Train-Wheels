@@ -30,7 +30,7 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
         recommendation = "For Constant Monitoring"
 
     import tempfile
-    backend_url = "https://ann-flaw-detection-system-for-train.onrender.com"
+    backend_url = "https://ann-flaw-detection-system-for-train.onrender.com/api/reports"  # Updated endpoint
 
     try:
         # Create a temporary image file from base64
@@ -53,14 +53,25 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
                 'wheel_diameter': str(wheel_diameter)
             }
 
-            response = requests.post(backend_url, files=files, data=data)
-
-            if response.status_code == 201:
-                print("Report sent successfully!")
-            else:
-                print(f"Failed to send report: {response.text}")
+            # Add timeout and better error handling
+            try:
+                response = requests.post(backend_url, files=files, data=data, timeout=10)
+                
+                if response.status_code == 201:
+                    print("Report sent successfully!")
+                    return True
+                else:
+                    print(f"Failed to send report. Status code: {response.status_code}")
+                    print(f"Response: {response.text}")
+                    return False
+                    
+            except requests.exceptions.RequestException as e:
+                print(f"Network error while sending report: {e}")
+                return False
+                
     except Exception as e:
-        print(f"Error sending report: {e}")
+        print(f"Error preparing report: {e}")
+        return False
     finally:
         if os.path.exists(temp_img_path):
             os.remove(temp_img_path)
@@ -979,7 +990,8 @@ class App(QMainWindow):
                 
                 report_name = f"Train {self.trainNumber} - Compartment {self.compartmentNumber} - Wheel {self.wheelNumber}"
                 
-                send_report_to_backend(
+                # Send report and check if it was successful
+                success = send_report_to_backend(
                     status=self.test_status,
                     recommendation=self.test_recommendation,
                     image_base64=image_base64,
@@ -990,9 +1002,13 @@ class App(QMainWindow):
                     wheel_diameter=self.current_distance
                 )
                 
-                # Only reset if save was successful
-                self.reset_ui()
-                
+                if success:
+                    # Only reset if save was successful
+                    self.reset_ui()
+                    QMessageBox.information(self, "Success", "Report saved successfully!")
+                else:
+                    QMessageBox.warning(self, "Warning", "Failed to save report. Please check your connection and try again.")
+                    
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save report: {str(e)}")
 
