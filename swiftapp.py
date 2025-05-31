@@ -25,7 +25,7 @@ except ImportError:
 def send_report_to_backend(status, recommendation, image_base64, name=None, notes="", trainNumber=None, compartmentNumber=None, wheelNumber=None, wheel_diameter=None):
     import tempfile
 
-    backend_url = "http://localhost:5000/api/reports"  # Change if hosted elsewhere
+    backend_url = "https://ann-flaw-detection-system-for-train.onrender.com"  # Change if hosted elsewhere
 
     try:
         # Create a temporary image file from base64
