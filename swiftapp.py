@@ -700,11 +700,7 @@ class App(QMainWindow):
         """)
         
         
-<<<<<<< HEAD
         self.button_layout.addWidget(self.detect_btn)
-=======
-                                                        self.button_layout.addWidget(self.detect_btn)
->>>>>>> a90583abfa707cbbe00df59aa125ec8ed2f32b71
         self.button_layout.addWidget(self.measure_btn)
         self.button_layout.addWidget(self.reset_btn)
         self.button_layout.addWidget(self.save_btn)
