@@ -134,7 +134,7 @@ class CameraThread(QThread):
 
     def load_model(self):
         try:
-            input_size = 2019
+            input_size = 2020
             self.model = ANNModel(input_size=input_size).to(self.device)
             model_path = 'ANN_model.pth'
             if os.path.exists(model_path):
@@ -166,8 +166,8 @@ class CameraThread(QThread):
             analytic_signal = hilbert(signal)
             amplitude_envelope = np.abs(analytic_signal)
             combined_features = np.concatenate([hog_features, amplitude_envelope])
-            if len(combined_features) != 2019:
-                combined_features = np.resize(combined_features, 2019)
+            if len(combined_features) != 2020:
+                combined_features = np.resize(combined_features, 2020)
             return combined_features
         except Exception as e:
             print(f"Error in image preprocessing: {e}")
@@ -309,10 +309,15 @@ class App(QMainWindow):
         
         self.camera_label = QLabel()
         self.camera_label.setAlignment(Qt.AlignCenter)
+        self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.camera_label.setMinimumSize(480, 360)
         self.camera_label.setStyleSheet("QLabel { background: black; border: none; }")
         
         self.camera_layout.addWidget(self.camera_label)
+        self.camera_panel.setFixedHeight(480)
+        self.camera_layout.setAlignment(Qt.AlignCenter)
+        self.camera_panel.setFixedSize(480, 360)
+        self.camera_layout.setAlignment(Qt.AlignCenter)
         self.camera_panel.setLayout(self.camera_layout)
         
         # Control Panel
@@ -675,8 +680,7 @@ class App(QMainWindow):
         self.button_layout.addWidget(self.detect_btn)
         self.button_layout.addWidget(self.measure_btn)
         self.save_btn.setVisible(False)
-        self.button_layout.addWidget(self.save_btn)
-        
+                                
         # 4. Reset Button
         self.reset_btn = QPushButton("RESET")
         self.reset_btn.setVisible(False)
@@ -694,11 +698,13 @@ class App(QMainWindow):
             QPushButton:hover { background-color: #222; }
             QPushButton:pressed { background-color: #111; }
         """)
-        self.button_layout.addWidget(self.reset_btn)
-
         
+        
+        self.button_layout.addWidget(self.detect_btn)
+        self.button_layout.addWidget(self.measure_btn)
         self.button_layout.addWidget(self.reset_btn)
         self.button_layout.addWidget(self.save_btn)
+        self.button_layout.addStretch()
         self.button_panel.setLayout(self.button_layout)
         
         self.control_layout.addWidget(self.status_panel)
@@ -765,6 +771,7 @@ class App(QMainWindow):
         self.reset_btn.setVisible(True)
         self.save_btn.setVisible(True)
         self.diameter_label.show()
+        self.detect_btn.setEnabled(False)
         self.measure_btn.setEnabled(True)  # Re-enable measure button after measurement
         self.save_btn.setEnabled(True)  # Enable save button after measurement
 
@@ -972,6 +979,7 @@ class App(QMainWindow):
     def on_measurement_complete(self):
         # Re-enable buttons
         # self.detect_btn.setEnabled(False)  # Removed from reset to allow re-detect
+        self.detect_btn.setEnabled(False)
         self.measure_btn.setEnabled(True)
         
         # Only enable save if we have both test result and measurement
@@ -1106,6 +1114,7 @@ class App(QMainWindow):
         
         # Enable measure button after flaw detection
         # self.detect_btn.setEnabled(False)  # Removed from reset to allow re-detect
+        self.detect_btn.setEnabled(False)
         self.measure_btn.setEnabled(True)
         self.save_btn.setEnabled(False)  # Still need measurement before saving
         
