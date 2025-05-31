@@ -1062,10 +1062,6 @@ def save_report(self):
         
         # Reset UI after saving
         self.reset_ui()
-
-        self.test_image = image
-        self.test_status = status
-        self.test_recommendation = recommendation
         
         # Enable measure button after flaw detection
         # self.detect_btn.setEnabled(False)  # Removed from reset to allow re-detect
@@ -1076,33 +1072,33 @@ def save_report(self):
         # Unload the model after displaying results
         self.camera_thread.unload_model()
 
-    def reset_ui(self):
-        self.status_indicator.setText("READY")
-        self.recommendation_indicator.setText("")
-        self.diameter_label.setText("Wheel Diameter: -")
-        self.diameter_label.hide()
-        self.status_indicator.setStyleSheet("""
-            QLabel {
-                color: black;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 18px;
-                padding: 15px 0;
-            }
-        """)
-        self.recommendation_indicator.setStyleSheet("""
-            QLabel {
-                color: #666;
-                font-family: 'Montserrat';
-                font-size: 14px;
-                padding: 10px 0;
-            }
-        """)
-        self.camera_label.setStyleSheet("""
-            QLabel {
-                background: black;
-                border: none;
-            }
-        """)
+        def reset_ui(self):
+            self.status_indicator.setText("READY")
+            self.recommendation_indicator.setText("")
+            self.diameter_label.setText("Wheel Diameter: -")
+            self.diameter_label.hide()
+            self.status_indicator.setStyleSheet("""
+                QLabel {
+                    color: black;
+                    font-family: 'Montserrat ExtraBold';
+                    font-size: 18px;
+                    padding: 15px 0;
+                }
+            """)
+            self.recommendation_indicator.setStyleSheet("""
+                QLabel {
+                    color: #666;
+                    font-family: 'Montserrat';
+                    font-size: 14px;
+                    padding: 10px 0;
+                }
+            """)
+            self.camera_label.setStyleSheet("""
+                QLabel {
+                    background: black;
+                    border: none;
+                }
+            """)
         
         # Reset buttons
         self.detect_btn.setEnabled(True)
@@ -1143,52 +1139,52 @@ def save_report(self):
         self.camera_thread.load_model()
 
     
-    def reset_ui(self):
-        self.status_indicator.setText("READY")
-        self.recommendation_indicator.setText("")
-        self.diameter_label.setText("Wheel Diameter: -")
-        self.diameter_label.hide()
-        self.status_indicator.setStyleSheet("""
-            QLabel {
-                color: black;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 18px;
-                padding: 15px 0;
-            }
-        """)
-        self.recommendation_indicator.setStyleSheet("""
-            QLabel {
-                color: #666;
-                font-family: 'Montserrat';
-                font-size: 14px;
-                padding: 10px 0;
-            }
-        """)
-        self.camera_label.setStyleSheet("""
-            QLabel {
-                background: black;
-                border: none;
-            }
-        """)
-        self.detect_btn.setEnabled(True)
-        self.detect_btn.setVisible(True)
-        self.measure_btn.setEnabled(False)
-        self.measure_btn.setVisible(True)
-        self.save_btn.setEnabled(False)
-        self.save_btn.setVisible(False)
-        self.reset_btn.setVisible(False)
+        def reset_ui(self):
+            self.status_indicator.setText("READY")
+            self.recommendation_indicator.setText("")
+            self.diameter_label.setText("Wheel Diameter: -")
+            self.diameter_label.hide()
+            self.status_indicator.setStyleSheet("""
+                QLabel {
+                    color: black;
+                    font-family: 'Montserrat ExtraBold';
+                    font-size: 18px;
+                    padding: 15px 0;
+                }
+            """)
+            self.recommendation_indicator.setStyleSheet("""
+                QLabel {
+                    color: #666;
+                    font-family: 'Montserrat';
+                    font-size: 14px;
+                    padding: 10px 0;
+                }
+            """)
+            self.camera_label.setStyleSheet("""
+                QLabel {
+                    background: black;
+                    border: none;
+                }
+            """)
+            self.detect_btn.setEnabled(True)
+            self.detect_btn.setVisible(True)
+            self.measure_btn.setEnabled(False)
+            self.measure_btn.setVisible(True)
+            self.save_btn.setEnabled(False)
+            self.save_btn.setVisible(False)
+            self.reset_btn.setVisible(False)
 
-        self.current_distance = 680
-        self.test_image = None
-        self.test_status = None
-        self.test_recommendation = None
-        self.camera_thread.load_model()
+            self.current_distance = 680
+            self.test_image = None
+            self.test_status = None
+            self.test_recommendation = None
+            self.camera_thread.load_model()
 
-    def closeEvent(self, event):
-        self.camera_thread.stop()
-        if hasattr(self, 'sensor_thread'):
-            self.sensor_thread.stop()
-        event.accept()
+        def closeEvent(self, event):
+            self.camera_thread.stop()
+            if hasattr(self, 'sensor_thread'):
+                self.sensor_thread.stop()
+            event.accept()
 
 if __name__ == "__main__":
     # Reduce memory usage by disabling unnecessary features
