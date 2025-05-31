@@ -911,12 +911,13 @@ class App(QMainWindow):
         self.reset_btn.setVisible(True)
 
     def handle_test_complete(self, image, status, recommendation):
-        # Ensure status is valid
-        if status not in ["FLAW DETECTED", "NO FLAW"]:
-            status = "NO FLAW"
-            recommendation = "For Constant Monitoring"
-        
-        self.test_image = image
+        # Ensure we have a valid image
+        if image is None or not isinstance(image, np.ndarray) or image.size == 0:
+            print("Error: Invalid image received from test")
+            self.test_image = None
+        else:
+            self.test_image = image.copy()  # Make a copy to ensure we don't lose it
+            
         self.test_status = status
         self.test_recommendation = recommendation
 
@@ -961,27 +962,39 @@ class App(QMainWindow):
         """)
         
         if msg.exec_() == QMessageBox.Save:
+            # Check if test_image exists and is valid
+            if self.test_image is None or not isinstance(self.test_image, np.ndarray) or self.test_image.size == 0:
+                QMessageBox.critical(self, "Error", "No valid inspection image available to save.")
+                return
+                
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             
-            # Convert image to base64
-            _, buffer = cv2.imencode('.jpg', self.test_image)
-            image_base64 = base64.b64encode(buffer).decode('utf-8')
-            
-            report_name = f"Train {self.trainNumber} - Compartment {self.compartmentNumber} - Wheel {self.wheelNumber}"
-            
-            send_report_to_backend(
-                status=self.test_status,
-                recommendation=self.test_recommendation,
-                image_base64=image_base64,
-                name=report_name,
-                trainNumber=self.trainNumber,
-                compartmentNumber=self.compartmentNumber,
-                wheelNumber=self.wheelNumber,
-                wheel_diameter=self.current_distance
-            )
-            
-            # Only reset if save was successful
-            self.reset_ui()
+            try:
+                # Convert image to base64
+                success, buffer = cv2.imencode('.jpg', self.test_image)
+                if not success:
+                    raise ValueError("Failed to encode image")
+                    
+                image_base64 = base64.b64encode(buffer).decode('utf-8')
+                
+                report_name = f"Train {self.trainNumber} - Compartment {self.compartmentNumber} - Wheel {self.wheelNumber}"
+                
+                send_report_to_backend(
+                    status=self.test_status,
+                    recommendation=self.test_recommendation,
+                    image_base64=image_base64,
+                    name=report_name,
+                    trainNumber=self.trainNumber,
+                    compartmentNumber=self.compartmentNumber,
+                    wheelNumber=self.wheelNumber,
+                    wheel_diameter=self.current_distance
+                )
+                
+                # Only reset if save was successful
+                self.reset_ui()
+                
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to save report: {str(e)}")
 
     def reset_ui(self):
         self.status_indicator.setText("READY")
