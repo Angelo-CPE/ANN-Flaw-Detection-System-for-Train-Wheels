@@ -316,7 +316,7 @@ class App(QMainWindow):
         self.camera_layout.addWidget(self.camera_label)
         self.camera_panel.setFixedHeight(480)
         self.camera_layout.setAlignment(Qt.AlignCenter)
-        self.camera_panel.setFixedSize(640, 480)
+        self.camera_panel.setFixedSize(480, 360)
         self.camera_layout.setAlignment(Qt.AlignCenter)
         self.camera_panel.setLayout(self.camera_layout)
         
@@ -680,7 +680,10 @@ class App(QMainWindow):
         self.button_layout.addWidget(self.detect_btn)
         self.button_layout.addWidget(self.measure_btn)
         self.save_btn.setVisible(False)
-                
+        self.button_layout.addWidget(self.save_btn)
+        self.button_layout.insertStretch(0, 1)
+        self.button_layout.addStretch(1)
+        
         # 4. Reset Button
         self.reset_btn = QPushButton("RESET")
         self.reset_btn.setVisible(False)
@@ -698,13 +701,19 @@ class App(QMainWindow):
             QPushButton:hover { background-color: #222; }
             QPushButton:pressed { background-color: #111; }
         """)
+        self.button_layout.addWidget(self.reset_btn)
+
         
-        
+        self.button_layout.addWidget(self.reset_btn)
+        self.button_layout.addWidget(self.save_btn)
+        self.button_layout.insertStretch(0, 1)
+        self.button_layout.addStretch(1)
         self.button_layout.addStretch()
         self.button_panel.setLayout(self.button_layout)
         
         self.control_layout.addWidget(self.status_panel)
         self.control_layout.addWidget(self.button_panel)
+        self.control_panel.setFixedHeight(480)
         self.control_panel.setLayout(self.control_layout)
         
         self.content_layout.addWidget(self.camera_panel, 60)
@@ -988,7 +997,21 @@ class App(QMainWindow):
         else:
             self.status_indicator.setText("READY")
 
-    def save_report(self):
+    
+    def handle_test_complete(self, image, status, recommendation):
+        self.test_image = image
+        self.test_status = status
+        self.test_recommendation = recommendation
+
+        # Enable measure button after flaw detection
+        self.detect_btn.setEnabled(False)
+        self.detect_btn.setVisible(False)
+        self.measure_btn.setEnabled(True)
+        self.save_btn.setEnabled(False)  # Still need measurement before saving
+
+        # Unload the model after displaying results
+        self.camera_thread.unload_model()
+def save_report(self):
         msg = QMessageBox()
         msg.setWindowTitle("Save Report")
         msg.setText("Save this inspection report?")
@@ -1040,49 +1063,6 @@ class App(QMainWindow):
         # Reset UI after saving
         self.reset_ui()
 
-    
-    def reset_ui(self):
-        self.status_indicator.setText("READY")
-        self.recommendation_indicator.setText("")
-        self.diameter_label.setText("Wheel Diameter: -")
-        self.diameter_label.hide()
-        self.status_indicator.setStyleSheet("""
-            QLabel {
-                color: black;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 18px;
-                padding: 15px 0;
-            }
-        """)
-        self.recommendation_indicator.setStyleSheet("""
-            QLabel {
-                color: #666;
-                font-family: 'Montserrat';
-                font-size: 14px;
-                padding: 10px 0;
-            }
-        """)
-        self.camera_label.setStyleSheet("""
-            QLabel {
-                background: black;
-                border: none;
-            }
-        """)
-        self.detect_btn.setEnabled(True)
-        self.detect_btn.setVisible(True)
-        self.measure_btn.setEnabled(False)
-        self.measure_btn.setVisible(True)
-        self.save_btn.setEnabled(False)
-        self.save_btn.setVisible(False)
-        self.reset_btn.setVisible(False)
-
-        self.current_distance = 680
-        self.test_image = None
-        self.test_status = None
-        self.test_recommendation = None
-        self.camera_thread.load_model()
-
-    def handle_test_complete(self, image, status, recommendation):
         self.test_image = image
         self.test_status = status
         self.test_recommendation = recommendation
@@ -1160,6 +1140,48 @@ class App(QMainWindow):
         self.test_recommendation = None
         
         # Reload the model for next use
+        self.camera_thread.load_model()
+
+    
+    def reset_ui(self):
+        self.status_indicator.setText("READY")
+        self.recommendation_indicator.setText("")
+        self.diameter_label.setText("Wheel Diameter: -")
+        self.diameter_label.hide()
+        self.status_indicator.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 18px;
+                padding: 15px 0;
+            }
+        """)
+        self.recommendation_indicator.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-family: 'Montserrat';
+                font-size: 14px;
+                padding: 10px 0;
+            }
+        """)
+        self.camera_label.setStyleSheet("""
+            QLabel {
+                background: black;
+                border: none;
+            }
+        """)
+        self.detect_btn.setEnabled(True)
+        self.detect_btn.setVisible(True)
+        self.measure_btn.setEnabled(False)
+        self.measure_btn.setVisible(True)
+        self.save_btn.setEnabled(False)
+        self.save_btn.setVisible(False)
+        self.reset_btn.setVisible(False)
+
+        self.current_distance = 680
+        self.test_image = None
+        self.test_status = None
+        self.test_recommendation = None
         self.camera_thread.load_model()
 
     def closeEvent(self, event):
