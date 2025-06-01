@@ -50,6 +50,8 @@ mongoose.connect(MONGODB_URI, {
   process.exit(1);
 });
 
+cleanupDuplicates();
+
 // Configure storage for uploaded images
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -159,16 +161,38 @@ app.post('/api/reports', upload.single('image'), async (req, res) => {
       });
     }
 
-    const report = new Report({
-      trainNumber,
-      compartmentNumber,
-      wheelNumber,
-      wheel_diameter,
-      status: status || 'NO FLAW',
-      image_path: `/uploads/${req.file.filename}`
-    });
+    const today = new Date().toISOString().slice(0, 10);
+      const startOfDay = new Date(`${today}T00:00:00.000Z`);
+      const endOfDay = new Date(`${today}T23:59:59.999Z`);
+
+      const existing = await Report.findOne({
+        trainNumber,
+        compartmentNumber,
+        wheelNumber,
+        timestamp: { $gte: startOfDay, $lte: endOfDay }
+      });
+
+      if (existing) {
+        const imagePath = path.join(__dirname, existing.image_path.replace('/uploads/', 'uploads/'));
+        if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+        await Report.deleteOne({ _id: existing._id });
+      }
+
+      const report = new Report({
+        trainNumber,
+        compartmentNumber,
+        wheelNumber,
+        wheel_diameter,
+        status,
+        recommendation,
+        name,
+        image_path: `/uploads/${req.file.filename}`
+      });
+
 
     await report.save();
+
+
     broadcastReportUpdate('created', report);
     
     res.status(201).json(report);
@@ -297,3 +321,29 @@ process.on('SIGINT', () => {
     });
   });
 });
+
+const cleanupDuplicates = async () => {
+  const allReports = await Report.find().sort({ timestamp: -1 });
+  const seen = new Set();
+  const toDelete = [];
+
+  for (const r of allReports) {
+    const date = new Date(r.timestamp).toISOString().slice(0, 10);
+    const key = `${r.trainNumber}-${r.compartmentNumber}-${r.wheelNumber}-${date}`;
+    if (seen.has(key)) {
+      toDelete.push(r);
+    } else {
+      seen.add(key);
+    }
+  }
+
+  for (const r of toDelete) {
+    const filePath = path.join(__dirname, r.image_path.replace('/uploads/', 'uploads/'));
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    await Report.deleteOne({ _id: r._id });
+    console.log(`🗑 Deleted: ${r.name}`);
+  }
+
+  console.log(`✅ Removed ${toDelete.length} duplicates.`);
+};
+
