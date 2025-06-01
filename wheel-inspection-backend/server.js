@@ -44,9 +44,7 @@ mongoose.connect(MONGODB_URI, {
   dbName: 'wheel_inspection'
   
 })
-.then(() => {console.log('Connected to MongoDB');
-  cleanupDuplicates();
-})
+.then(() => console.log('Connected to MongoDB'))
 .catch(err => {
   console.error('MongoDB connection error:', err);
   process.exit(1);
@@ -137,31 +135,6 @@ wss.on('connection', (ws, req) => {
     console.log('WebSocket client disconnected');
   });
 });
-
-const cleanupDuplicates = async () => {
-  const allReports = await Report.find().sort({ timestamp: -1 });
-  const seen = new Set();
-  const toDelete = [];
-
-  for (const r of allReports) {
-    const date = new Date(r.timestamp).toISOString().slice(0, 10);
-    const key = `${r.trainNumber}-${r.compartmentNumber}-${r.wheelNumber}-${date}`;
-    if (seen.has(key)) {
-      toDelete.push(r);
-    } else {
-      seen.add(key);
-    }
-  }
-
-  for (const r of toDelete) {
-    const filePath = path.join(__dirname, r.image_path.replace('/uploads/', 'uploads/'));
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    await Report.deleteOne({ _id: r._id });
-    console.log(`🗑 Deleted: ${r.name}`);
-  }
-
-  console.log(`✅ Removed ${toDelete.length} duplicates.`);
-};
 
 const broadcastReportUpdate = (action, data) => {
   wss.clients.forEach(client => {
