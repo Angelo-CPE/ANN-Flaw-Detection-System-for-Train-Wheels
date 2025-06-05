@@ -1,9 +1,6 @@
 ## INSTRUCTIONS FOR JETSON NANO ##
 1. Open Terminal, use this command **_cd Documents/THESIS/ANN-Flaw-Detection-System-for-Train-Wheels_**.
-2. After, follow these chain of commands:
-   **_git add ._**
-   **_git add commit -m "pulling updates_**
-   **_git pull origin main_**
+2. After, follow these chain of commands: **_git add ._**, **_git add commit -m "pulling updates_**, and **_git pull origin main_**
 4. Then use this command **_python3 swiftapp.py_**
 5. Wait till the app opens then wait for 2-5 seconds after it opens for the camera to initialize.
 6. Press **_Flaw Detection_**, then **_Measure Diameter_** (for a 700mm wheel) save the result in your phone (thru typing in notes or in our group chat), then press **_Reset_**.
