@@ -344,7 +344,6 @@ app.post('/api/auth/login', [
   }
   
   try {
-    sendTokenResponse(user, 201, res);
     const { email, password } = req.body;
     
     const user = await User.findOne({ email }).select('+password');
