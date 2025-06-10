@@ -314,20 +314,19 @@ app.post('/api/auth/register', [
   }
   
   try {
-    sendTokenResponse(user, 201, res);
     const { email, password, name } = req.body;
-    
+
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ success: false, error: 'User already exists' });
     }
-    
+
     const user = await User.create({
       email,
       password,
       name
     });
-    
+
     sendTokenResponse(user, 201, res);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -362,7 +361,6 @@ app.post('/api/auth/login', [
   }
 });
 
-// ... (other auth routes remain the same as previous implementation)
 
 // Report Routes (protected)
 app.get('/api/reports', protect, async (req, res) => {
