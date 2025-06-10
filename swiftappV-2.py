@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import serial
 import cv2
 import base64
 import torch
@@ -81,27 +82,56 @@ class DistanceSensorThread(QThread):
     measurement_complete = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, tof):
+    def __init__(self, port='/dev/ttyACM0', baudrate=9600):
         super().__init__()
         self._run_flag = True
-        self.tof = tof
+        self.port = port
+        self.baudrate = baudrate
 
     def run(self):
         try:
-            start_time = time.time()
-            while time.time() - start_time < 1.0 and self._run_flag:
-                distance = self.tof.get_distance()
-                if distance > 0:
-                    self.distance_measured.emit(distance)
-                time.sleep(0.05)
+            with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
+                print(f"Connected to {self.port} at {self.baudrate} baud")
+                
+                # Clear any existing data in buffers
+                ser.reset_input_buffer()
+                ser.reset_output_buffer()
+                
+                # Allow time for Arduino to initialize
+                time.sleep(2)
+                
+                # Send request for reading
+                ser.write(b'R')
+                
+                # Read with timeout (adjusted for 9600 baud)
+                start_time = time.time()
+                while time.time() - start_time < 3:  # 3 second timeout
+                    if ser.in_waiting:
+                        line = ser.readline().decode('ascii', errors='ignore').strip()
+                        if line:
+                            print(f"Received: {line}")
+                            try:
+                                distance = int(line)
+                                if 0 < distance < 2000:  # Valid range check
+                                    self.distance_measured.emit(distance)
+                                    self.measurement_complete.emit()
+                                    return
+                                elif distance == -1:
+                                    self.error_occurred.emit("Sensor initialization error")
+                                    break
+                                elif distance == -2:
+                                    self.error_occurred.emit("Sensor timeout occurred")
+                                    break
+                            except ValueError:
+                                continue  # Skip non-integer lines
+                
+                self.error_occurred.emit("No valid measurement received within timeout")
+                
+        except serial.SerialException as e:
+            self.error_occurred.emit(f"Serial port error: {str(e)}")
         except Exception as e:
-            self.error_occurred.emit(str(e))
+            self.error_occurred.emit(f"Unexpected error: {str(e)}")
         finally:
-            try:
-                self.tof.stop_ranging()
-                self.tof.close()
-            except Exception as e:
-                print(f"Sensor cleanup error: {e}")
             self.measurement_complete.emit()
 
     def stop(self):
