@@ -1001,3 +1001,366 @@ if __name__ == '__main__':
     ex = App()
     ex.show()
     sys.exit(app.exec_())
+
+
+
+
+    def setup_number_controls(self):
+        self.train_decrement.clicked.connect(lambda: self.update_number('train', -1))
+        self.train_increment.clicked.connect(lambda: self.update_number('train', 1))
+        self.compartment_decrement.clicked.connect(lambda: self.update_number('compartment', -1))
+        self.compartment_increment.clicked.connect(lambda: self.update_number('compartment', 1))
+        self.wheel_decrement.clicked.connect(lambda: self.update_number('wheel', -1))
+        self.wheel_increment.clicked.connect(lambda: self.update_number('wheel', 1))
+
+    def update_number(self, number_type, change):
+        if number_type == 'train':
+            self.trainNumber = max(1, min(20, self.trainNumber + change))
+            self.trainNumber_label.setText(str(self.trainNumber))
+        elif number_type == 'compartment':
+            self.compartmentNumber = max(1, min(8, self.compartmentNumber + change))
+            self.compartmentNumber_label.setText(str(self.compartmentNumber))
+        elif number_type == 'wheel':
+            self.wheelNumber = max(1, min(8, self.wheelNumber + change))
+            self.wheelNumber_label.setText(str(self.wheelNumber))
+
+    def setup_animations(self):
+        self.status_animation = QPropertyAnimation(self.status_indicator, b"windowOpacity")
+        self.status_animation.setDuration(300)
+        self.status_animation.setStartValue(0.7)
+        self.status_animation.setEndValue(1.0)
+
+    def setup_camera_thread(self):
+        self.camera_thread = CameraThread()
+        self.camera_thread.change_pixmap_signal.connect(self.update_image)
+        self.camera_thread.status_signal.connect(self.update_status)
+        self.camera_thread.test_complete_signal.connect(self.handle_test_complete)
+        self.camera_thread.animation_signal.connect(self.trigger_animation)
+        self.camera_thread.enable_buttons_signal.connect(self.set_buttons_enabled)
+        self.camera_thread.start()
+
+    def update_distance(self, distance):
+        self.current_distance = distance
+        self.diameter_label.setText(f"Wheel Diameter: {distance} mm")
+        self.detect_btn.setVisible(False)
+        self.measure_btn.setVisible(False)
+        self.reset_btn.setVisible(True)
+        self.save_btn.setVisible(True)
+        self.diameter_label.show()
+
+    def connect_signals(self):
+        self.detect_btn.clicked.connect(self.detect_flaws)
+        self.measure_btn.clicked.connect(self.measure_diameter)
+        self.save_btn.clicked.connect(self.save_report)
+        self.reset_btn.clicked.connect(self.reset_ui)
+
+    def set_buttons_enabled(self, enabled):
+        # Only enable measure button if we have a test result
+        if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
+            self.measure_btn.setEnabled(enabled)
+        else:
+            self.measure_btn.setEnabled(False)
+        
+        # Only enable save button if we have both test result and measurement
+        if (hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"] and self.current_distance != 680):
+            self.save_btn.setEnabled(enabled)
+        else:
+            self.save_btn.setEnabled(False)
+
+    def trigger_animation(self):
+        self.status_animation.start()
+
+    def update_image(self, qt_image):
+        self.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
+            self.camera_label.width(), self.camera_label.height(),
+            Qt.KeepAspectRatio, Qt.SmoothTransformation
+        ))
+
+    def update_status(self, status, recommendation):
+        if status in ["FLAW DETECTED", "NO FLAW"]:
+            if hasattr(self, 'current_distance'):
+                self.diameter_label.setText("Wheel Diameter: Measure Next")
+            else:
+                self.diameter_label.setText("Wheel Diameter: -")
+            self.diameter_label.show()
+        else:
+            self.diameter_label.hide()
+            
+        self.status_indicator.setText(status)
+        self.recommendation_indicator.setText(recommendation)
+        
+        if status == "FLAW DETECTED":
+            self.status_indicator.setStyleSheet("""
+                QLabel {
+                    color: red;
+                    font-family: 'Montserrat ExtraBold';
+                    font-size: 18px;
+                    padding: 15px 0;
+                }
+            """)
+            self.camera_label.setStyleSheet("""
+                QLabel {
+                    background: black;
+                    border: 4px solid red;
+                }
+            """)
+        elif status == "NO FLAW":
+            self.status_indicator.setStyleSheet("""
+                QLabel {
+                    color: #00CC00;
+                    font-family: 'Montserrat ExtraBold';
+                    font-size: 18px;
+                    padding: 15px 0;
+                }
+            """)
+            self.camera_label.setStyleSheet("""
+                QLabel {
+                    background: black;
+                    border: 4px solid #00CC00;
+                }
+            """)
+        else:
+            self.status_indicator.setStyleSheet("""
+                QLabel {
+                    color: black;
+                    font-family: 'Montserrat ExtraBold';
+                    font-size: 18px;
+                    padding: 15px 0;
+                }
+            """)
+            self.camera_label.setStyleSheet("""
+                QLabel {
+                    background: black;
+                    border: none;
+                }
+            """)
+        
+        self.trigger_animation()
+
+    def detect_flaws(self):
+        self.status_indicator.setText("ANALYZING...")
+        self.status_indicator.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 18px;
+                padding: 15px 0;
+            }
+        """)
+        self.camera_label.setStyleSheet("""
+            QLabel {
+                background: black;
+                border: none;
+            }
+        """)
+        self.diameter_label.hide()
+        
+        # Immediately disable the button for visual feedback
+        self.detect_btn.setEnabled(False)
+        self.measure_btn.setEnabled(False)
+        self.save_btn.setEnabled(False)
+        
+        self.camera_thread.start_test()
+
+    def measure_diameter(self):
+        self.diameter_label.setText("Measuring...")
+        self.diameter_label.show()
+
+        self.detect_btn.setEnabled(False)
+        self.measure_btn.setEnabled(False)
+        self.save_btn.setEnabled(False)
+
+        try:
+            # VL53L0X is handled by Arduino, so this part is removed
+            # self.tof = VL53L0X.VL53L0X()
+            # self.tof.open()
+            # time.sleep(0.1)
+            # self.tof.start_ranging(VL53L0X.Vl53l0xAccuracyMode.GOOD)
+
+            self.sensor_thread = DistanceSensorThread()
+            self.sensor_thread.distance_measured.connect(self.update_distance)
+            self.sensor_thread.measurement_complete.connect(self.on_measurement_complete)
+            self.sensor_thread.error_occurred.connect(self.on_measurement_error)
+            self.sensor_thread.start()
+
+        except Exception as e:
+            print(f"Sensor init error: {e}")
+            self.on_measurement_error("Sensor init error")
+
+    def on_measurement_error(self, error_msg):
+        print(f"Measurement error: {error_msg}")
+        self.on_measurement_complete()
+
+    def on_measurement_complete(self):
+        # After measurement, show Reset and Save buttons
+        self.detect_btn.setVisible(False)
+        self.measure_btn.setVisible(False)
+        self.save_btn.setEnabled(True)
+        self.save_btn.setVisible(True)
+        self.reset_btn.setVisible(True)
+
+    def handle_test_complete(self, image, status, recommendation):
+        # Ensure we have a valid image
+        if image is None or not isinstance(image, np.ndarray) or image.size == 0:
+            print("Error: Invalid image received from test")
+            self.test_image = None
+        else:
+            self.test_image = image.copy()  # Make a copy to ensure we don't lose it
+            
+        self.test_status = status
+        self.test_recommendation = recommendation
+
+        # After detection, show:
+        # - Detect Flaws (disabled)
+        # - Measure Diameter (enabled)
+        self.detect_btn.setEnabled(False)
+        self.detect_btn.setVisible(True)
+        self.measure_btn.setEnabled(True)
+        self.measure_btn.setVisible(True)
+        self.save_btn.setEnabled(False)
+        self.save_btn.setVisible(False)
+        self.reset_btn.setVisible(False)
+
+    def save_report(self):
+        msg = QMessageBox()
+        msg.setWindowTitle("Save Report")
+        msg.setText("Save this inspection report?")
+        msg.setIcon(QMessageBox.Question)
+        msg.setStandardButtons(QMessageBox.Save | QMessageBox.Cancel)
+        msg.setStyleSheet("""
+            QMessageBox {
+                background-color: white;
+                border: 1px solid #ddd;
+                font-family: 'Montserrat';
+            }
+            QLabel {
+                color: black;
+                font-size: 14px;
+            }
+            QPushButton {
+                background-color: #006600;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 14px;
+                min-width: 80px;
+            }
+            QPushButton:hover { background-color: #004400; }
+            #qt_msgbox_buttonbox { border-top: 1px solid #ddd; padding-top: 16px; }
+        """)
+        
+        if msg.exec_() == QMessageBox.Save:
+            # Check if test_image exists and is valid
+            if self.test_image is None or not isinstance(self.test_image, np.ndarray) or self.test_image.size == 0:
+                QMessageBox.critical(self, "Error", "No valid inspection image available to save.")
+                return
+                
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            
+            try:
+                # Convert image to base64
+                success, buffer = cv2.imencode('.jpg', self.test_image)
+                if not success:
+                    raise ValueError("Failed to encode image")
+                    
+                image_base64 = base64.b64encode(buffer).decode('utf-8')
+                
+                report_name = f"Train {self.trainNumber} - Compartment {self.compartmentNumber} - Wheel {self.wheelNumber}"
+                
+                # Send report and check if it was successful
+                success = send_report_to_backend(
+                    status=self.test_status,
+                    recommendation=self.test_recommendation,
+                    image_base64=image_base64,
+                    name=report_name,
+                    trainNumber=self.trainNumber,
+                    compartmentNumber=self.compartmentNumber,
+                    wheelNumber=self.wheelNumber,
+                    wheel_diameter=self.current_distance
+                )
+                
+                if success:
+                    # Only reset if save was successful
+                    self.reset_ui()
+                    QMessageBox.information(self, "Success", "Report saved successfully!")
+                else:
+                    QMessageBox.warning(self, "Warning", "Failed to save report. Please check your connection and try again.")
+                    
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to save report: {str(e)}")
+
+    def reset_ui(self):
+        self.status_indicator.setText("READY")
+        self.recommendation_indicator.setText("")
+        self.diameter_label.setText("Wheel Diameter: -")
+        self.diameter_label.hide()
+        self.status_indicator.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-family: 'Montserrat ExtraBold';
+                font-size: 18px;
+                padding: 15px 0;
+            }
+        """)
+        self.recommendation_indicator.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-family: 'Montserrat';
+                font-size: 14px;
+                padding: 10px 0;
+            }
+        """)
+        self.camera_label.setStyleSheet("""
+            QLabel {
+                background: black;
+                border: none;
+            }
+        """)
+        
+        # Reset buttons to initial state
+        self.detect_btn.setEnabled(True)
+        self.detect_btn.setVisible(True)
+        self.measure_btn.setEnabled(False)
+        self.measure_btn.setVisible(True)
+        self.save_btn.setEnabled(False)
+        self.save_btn.setVisible(False)
+        self.reset_btn.setVisible(False)
+
+        # Reset data
+        self.current_distance = 680
+        self.test_image = None
+        self.test_status = None
+        self.test_recommendation = None
+        
+        # Reload the model for next use
+        self.camera_thread.load_model()
+
+    def closeEvent(self, event):
+        self.camera_thread.stop()
+        if hasattr(self, 'sensor_thread'):
+            self.sensor_thread.stop()
+        event.accept()
+
+if __name__ == "__main__":
+    os.environ["QT_QUICK_BACKEND"] = "software"
+    os.environ["QT_QPA_PLATFORM"] = "xcb"
+    
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    
+    palette = app.palette()
+    palette.setColor(palette.Window, QColor(255, 255, 255))
+    palette.setColor(palette.WindowText, QColor(0, 0, 0))
+    palette.setColor(palette.Base, QColor(255, 255, 255))
+    app.setPalette(palette)
+    
+    window = App()
+    window.show()
+    
+    try:
+        os.nice(10)
+    except:
+        pass
+    
+    sys.exit(app.exec_())
