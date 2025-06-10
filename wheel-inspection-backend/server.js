@@ -17,20 +17,17 @@ const { body, validationResult } = require('express-validator');
 
 const app = express();
 
-// Middleware
 app.use(cors());
 app.use(helmet());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Request logging middleware
 app.use((req, res, next) => {
   console.log(`Incoming ${req.method} request to ${req.path}`);
   next();
 });
 
-// Rate limiting
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   max: 100
@@ -43,7 +40,6 @@ const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('he
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 
-// Configure email transporter
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -52,7 +48,6 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// Connect to MongoDB
 mongoose.connect(MONGODB_URI, { 
   useNewUrlParser: true, 
   useUnifiedTopology: true,
@@ -64,7 +59,6 @@ mongoose.connect(MONGODB_URI, {
   process.exit(1);
 });
 
-// User Schema and Model
 const userSchema = new mongoose.Schema({
   email: { 
     type: String, 
@@ -77,7 +71,18 @@ const userSchema = new mongoose.Schema({
       message: props => `${props.value} is not a valid TIP email address!`
     }
   },
-  password: { type: String, required: true, select: false },
+  password: { 
+    type: String, 
+    required: true, 
+    select: false,
+    validate: {
+      validator: function(v) {
+        return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(v);
+      },
+      message: props => 
+        'Password must contain at least 8 characters, one uppercase, one lowercase, one number and one special character'
+    }
+  },
   name: { type: String, required: true },
   role: { type: String, enum: ['user', 'admin'], default: 'user' },
   createdAt: { type: Date, default: Date.now },
@@ -211,6 +216,35 @@ wss.on('connection', (ws, req) => {
   });
 });
 
+const sendTokenResponse = (user, statusCode, res) => {
+  const token = user.getSignedJwtToken();
+
+  const options = {
+    expires: new Date(
+      Date.now() + process.env.JWT_COOKIE_EXPIRE * 24 * 60 * 60 * 1000
+    ),
+    httpOnly: true
+  };
+
+  if (process.env.NODE_ENV === 'production') {
+    options.secure = true;
+  }
+
+  res
+    .status(statusCode)
+    .cookie('token', token, options)
+    .json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+};
+
 const broadcastReportUpdate = (action, data) => {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
@@ -258,7 +292,7 @@ const authorize = (...roles) => {
 
 // API Routes
 
-// Auth Routes (unchanged)
+// Auth Routes 
 app.post('/api/auth/register', [
   body('email').isEmail().withMessage('Please include a valid email').custom(value => {
     if (!value.endsWith('@tip.edu.ph')) {
@@ -266,7 +300,12 @@ app.post('/api/auth/register', [
     }
     return true;
   }),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
+  body('password')
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
+    .matches(/[a-z]/).withMessage('Password must contain at least one lowercase letter')
+    .matches(/[A-Z]/).withMessage('Password must contain at least one uppercase letter')
+    .matches(/\d/).withMessage('Password must contain at least one number')
+    .matches(/[@$!%*?&]/).withMessage('Password must contain at least one special character (@$!%*?&)'),
   body('name').notEmpty().withMessage('Please include a name')
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -275,6 +314,7 @@ app.post('/api/auth/register', [
   }
   
   try {
+    sendTokenResponse(user, 201, res);
     const { email, password, name } = req.body;
     
     const existingUser = await User.findOne({ email });
@@ -304,6 +344,7 @@ app.post('/api/auth/login', [
   }
   
   try {
+    sendTokenResponse(user, 201, res);
     const { email, password } = req.body;
     
     const user = await User.findOne({ email }).select('+password');
@@ -521,6 +562,15 @@ app.get('/api/compartments/:trainNumber', protect, async (req, res) => {
 // Error Handling
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
+  
+  if (err instanceof mongoose.Error.ValidationError) {
+    const messages = Object.values(err.errors).map(val => val.message);
+    return res.status(400).json({
+      success: false,
+      error: 'Validation error',
+      messages: messages
+    });
+  }
   
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ 
