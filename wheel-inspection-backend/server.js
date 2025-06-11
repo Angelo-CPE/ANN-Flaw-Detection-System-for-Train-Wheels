@@ -291,6 +291,20 @@ const authorize = (...roles) => {
 // API Routes
 
 // Auth Routes 
+app.get('/api/auth/me', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    res.status(200).json({
+      success: true,
+      data: user
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: 'Server error'
+    });
+  }
+});
 app.post('/api/auth/register', [
   body('email').isEmail().withMessage('Please include a valid email').custom(value => {
     if (!value.endsWith('@tip.edu.ph')) {
