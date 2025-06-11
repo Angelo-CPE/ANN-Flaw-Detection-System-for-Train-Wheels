@@ -794,6 +794,13 @@ class App(QMainWindow):
         self.battery_monitor_thread.battery_percentage_signal.connect(self.update_battery_percentage)
         self.battery_monitor_thread.start()
 
+    def setup_animations(self):
+        """Initialize animations for the UI elements"""
+        self.status_animation = QPropertyAnimation(self.status_indicator, b"windowOpacity")
+        self.status_animation.setDuration(300)
+        self.status_animation.setStartValue(0.7)
+        self.status_animation.setEndValue(1.0)
+
     def setup_number_controls(self):
         self.train_decrement.clicked.connect(self.decrement_train_number)
         self.train_increment.clicked.connect(self.increment_train_number)
