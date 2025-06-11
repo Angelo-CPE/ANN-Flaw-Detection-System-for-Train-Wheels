@@ -17,21 +17,16 @@ from PyQt5.QtGui import QImage, QPixmap, QFont, QColor, QPainter, QPen, QFontDat
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve
 from simulated_ina219 import INA219
 
-# VL53L0X library is not directly used in the Jetson code, as the Arduino handles the sensor communication.
-# The Python script communicates with the Arduino via serial to get distance measurements.
-
 def send_report_to_backend(status, recommendation, image_base64, name=None, trainNumber=None, compartmentNumber=None, wheelNumber=None, wheel_diameter=None):
-    # Validate status before sending
     if status not in ["FLAW DETECTED", "NO FLAW"]:
         print("Invalid status, defaulting to 'NO FLAW'")
         status = "NO FLAW"
         recommendation = "For Constant Monitoring"
 
     import tempfile
-    backend_url = "https://ann-flaw-detection-system-for-train.onrender.com/api/reports"  # Updated endpoint
+    backend_url = "https://ann-flaw-detection-system-for-train.onrender.com/api/reports"
 
     try:
-        # Create a temporary image file from base64
         img_data = base64.b64decode(image_base64)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_img:
             temp_img.write(img_data)
@@ -51,7 +46,6 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
                 'wheel_diameter': str(wheel_diameter)
             }
 
-            # Add timeout and better error handling
             try:
                 response = requests.post(backend_url, files=files, data=data, timeout=10)
                 
@@ -87,38 +81,32 @@ class DistanceSensorThread(QThread):
 
     def run(self):
         try:
-            # Attempt to open serial port
             with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
                 print(f"Connected to {self.port} at {self.baudrate} baud")
                 
-                # Clear any existing data in buffers
                 ser.reset_input_buffer()
                 ser.reset_output_buffer()
                 
-                # Allow time for Arduino to initialize and send its initial messages
                 time.sleep(2)
                 
-                # Read and discard any initial messages from Arduino (e.g., "Initializing VL53L0X sensor...")
                 while ser.in_waiting:
                     ser.readline()
 
-                # Send request for reading to Arduino
-                ser.write(b'R\n') # Send 'R' followed by a newline as Arduino expects Serial.read()
+                ser.write(b'R\n')
                 
-                # Read with timeout
                 start_time = time.time()
-                while time.time() - start_time < 5:  # Increased timeout to 5 seconds for robustness
+                while time.time() - start_time < 5:
                     if ser.in_waiting:
                         line = ser.readline().decode('ascii', errors='ignore').strip()
                         if line:
                             print(f"Received from Arduino: {line}")
                             try:
                                 distance = int(line)
-                                if distance > 0:  # Valid distance measurement
+                                if distance > 0:
                                     self.distance_measured.emit(distance)
                                     self.measurement_complete.emit()
                                     return
-                                elif distance == 0: # No new measurement available from Arduino
+                                elif distance == 0:
                                     self.error_occurred.emit("No new distance measurement available from Arduino.")
                                     break
                                 elif distance == -1:
@@ -128,9 +116,8 @@ class DistanceSensorThread(QThread):
                                     self.error_occurred.emit("Arduino: Sensor timeout occurred.")
                                     break
                             except ValueError:
-                                # This handles cases where Arduino sends non-integer debug messages
                                 print(f"Non-integer data received from Arduino: {line}")
-                                continue  # Skip non-integer lines and continue waiting for a valid measurement
+                                continue
                 
                 self.error_occurred.emit("No valid distance measurement received from Arduino within timeout.")
                 
@@ -315,6 +302,30 @@ class CameraThread(QThread):
         self._run_flag = False
         self.wait()
 
+class BatteryMonitorThread(QThread):
+    battery_percentage_signal = pyqtSignal(int)
+
+    def __init__(self):
+        super().__init__()
+        self._run_flag = True
+        self.ina219 = INA219()
+
+    def run(self):
+        while self._run_flag:
+            try:
+                bus_voltage = self.ina219.getBusVoltage_V()
+                percentage = ((bus_voltage - 7.0) / (8.4 - 7.0)) * 100
+                percentage = max(0, min(100, int(percentage)))
+                self.battery_percentage_signal.emit(percentage)
+            except Exception as e:
+                print(f"Error reading battery data: {e}")
+                self.battery_percentage_signal.emit(-1)
+            time.sleep(5)
+
+    def stop(self):
+        self._run_flag = False
+        self.wait()
+
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -325,7 +336,7 @@ class App(QMainWindow):
         self.trainNumber = 1
         self.compartmentNumber = 1
         self.wheelNumber = 1
-        self.current_distance = 680 # Initial dummy value
+        self.current_distance = 680
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
@@ -694,7 +705,7 @@ class App(QMainWindow):
         
         # 2. Measure Diameter Button
         self.measure_btn = QPushButton("MEASURE DIAMETER")
-        self.measure_btn.setEnabled(True) # Enabled by default for testing serial communication
+        self.measure_btn.setEnabled(True)
         self.measure_btn.setCursor(Qt.PointingHandCursor)
         self.measure_btn.setStyleSheet("""
             QPushButton {
@@ -783,12 +794,6 @@ class App(QMainWindow):
         self.battery_monitor_thread.battery_percentage_signal.connect(self.update_battery_percentage)
         self.battery_monitor_thread.start()
 
-    def update_battery_percentage(self, percentage):
-        if percentage == -1:
-            self.battery_label.setText("Battery: Error")
-        else:
-            self.battery_label.setText(f"Battery: {percentage}%")
-
     def setup_number_controls(self):
         self.train_decrement.clicked.connect(self.decrement_train_number)
         self.train_increment.clicked.connect(self.increment_train_number)
@@ -852,57 +857,8 @@ class App(QMainWindow):
 
     def on_distance_measured(self, distance):
         self.current_distance = distance
-        # Assuming a simple linear relationship for demonstration. Adjust as needed.
-        # For example, if 680mm distance corresponds to 920mm diameter, and 700mm distance to 900mm diameter
-        # This is a placeholder and needs actual calibration data.
-        # Let's assume a simple inverse relationship for now: smaller distance means larger diameter
-        # And a baseline: if distance is 680mm, diameter is 920mm
-        # If distance increases by 1mm, diameter decreases by X mm
-        # Example: if distance increases by 1mm, diameter decreases by 2mm
-        # diameter = 920 - (distance - 680) * 2
-        
-        # A more robust approach would be to use a lookup table or a more complex regression model
-        # For now, let's just display the distance directly as diameter for simplicity, or a fixed value.
-        # self.diameter_label.setText(f"Wheel Diameter: {self.current_distance} mm")
-        
-        # Placeholder for actual diameter calculation based on distance
-        # This needs to be calibrated with actual wheel diameters and sensor distances
-        # For now, let's use a dummy calculation or just display the distance
-        
-        # Example: If the sensor is 680mm away from a 920mm wheel, and we want to show 920mm
-        # If the sensor reads 680, then diameter is 920
-        # If the sensor reads 670, then diameter is 930 (closer, larger wheel)
-        # If the sensor reads 690, then diameter is 910 (further, smaller wheel)
-        
-        # Let's assume a simple linear mapping for now: 1mm change in distance = 1mm change in diameter (inverse)
-        # Base distance = 680mm, Base diameter = 920mm
-        # diameter = 920 + (680 - self.current_distance)
-        
-        # For a more realistic scenario, you'd have a calibration curve or formula.
-        # For this example, let's just show a fixed diameter if the distance is within a certain range,
-        # or directly show the distance as diameter for now.
-        
-        # Let's assume a target distance of 680mm for a standard wheel of 920mm diameter.
-        # If the measured distance is `d`, and the reference distance is `d_ref` (680mm) for a reference diameter `dia_ref` (920mm).
-        # A simple inverse proportionality: `diameter = dia_ref * (d_ref / d)`
-        # This might not be perfectly linear, but it's a starting point.
-        
         if self.current_distance > 0:
-            # Example: if 680mm distance corresponds to 920mm diameter
-            # Let's use a simple linear interpolation for demonstration purposes.
-            # You would replace this with your actual calibration data.
-            
-            # Define two calibration points (distance, diameter)
-            # Point 1: (d1, dia1) - e.g., (650mm, 950mm)
-            # Point 2: (d2, dia2) - e.g., (700mm, 880mm)
-            
-            # For simplicity, let's just use a direct display of distance for now,
-            # or a dummy calculation that shows some variation.
-            
-            # Dummy calculation: if distance is 680, diameter is 920. Each 10mm deviation changes diameter by 5mm.
-            # If distance is less than 680, diameter is larger. If more, diameter is smaller.
-            
-            diameter_calculated = 920 + (680 - self.current_distance) * 0.5 # Adjust multiplier as needed
+            diameter_calculated = 920 + (680 - self.current_distance) * 0.5
             self.diameter_label.setText(f"Wheel Diameter: {diameter_calculated:.2f} mm")
             self.diameter_label.show()
         else:
@@ -942,18 +898,16 @@ class App(QMainWindow):
     def trigger_animation(self):
         self.analyzing_label.show()
         self.animation = QPropertyAnimation(self.analyzing_label, b"geometry")
-        self.animation.setDuration(1000) # 1 second
+        self.animation.setDuration(1000)
         
-        # Start position (current position)
         current_rect = self.analyzing_label.geometry()
         self.animation.setStartValue(current_rect)
         
-        # End position (move slightly to the right and back)
-        end_rect = current_rect.translated(10, 0) # Move 10 pixels right
+        end_rect = current_rect.translated(10, 0)
         self.animation.setEndValue(end_rect)
         
         self.animation.setEasingCurve(QEasingCurve.InOutQuad)
-        self.animation.setLoopCount(2) # Play twice (right and back)
+        self.animation.setLoopCount(2)
         self.animation.finished.connect(self.hide_analyzing_label)
         self.animation.start()
 
@@ -963,8 +917,6 @@ class App(QMainWindow):
     def enable_buttons(self, enable):
         self.detect_btn.setEnabled(enable)
         self.measure_btn.setEnabled(enable)
-        # self.save_btn.setEnabled(enable) # Save button enabled only after a test
-        # self.reset_btn.setEnabled(enable) # Reset button enabled only after a test
 
     def save_report(self):
         if self.test_image is not None and self.test_status is not None and self.test_recommendation is not None:
@@ -1003,12 +955,18 @@ class App(QMainWindow):
         self.reset_btn.setVisible(False)
         self.enable_buttons(True)
 
+    def update_battery_percentage(self, percentage):
+        if percentage == -1:
+            self.battery_label.setText("Battery: Error")
+        else:
+            self.battery_label.setText(f"Battery: {percentage}%")
+
     def closeEvent(self, event):
         self.camera_thread.stop()
+        self.battery_monitor_thread.stop()
         event.accept()
 
 if __name__ == '__main__':
-    # Ensure serial module is available
     try:
         import serial
     except ImportError:
@@ -1016,7 +974,6 @@ if __name__ == '__main__':
         sys.exit(1)
 
     app = QApplication(sys.argv)
-    # Load custom fonts
     QFontDatabase.addApplicationFont("Montserrat-Black.ttf")
     QFontDatabase.addApplicationFont("Montserrat-Bold.ttf")
     QFontDatabase.addApplicationFont("Montserrat-ExtraBold.ttf")
@@ -1026,393 +983,3 @@ if __name__ == '__main__':
     ex = App()
     ex.show()
     sys.exit(app.exec_())
-
-
-
-
-    def setup_number_controls(self):
-        self.train_decrement.clicked.connect(lambda: self.update_number('train', -1))
-        self.train_increment.clicked.connect(lambda: self.update_number('train', 1))
-        self.compartment_decrement.clicked.connect(lambda: self.update_number('compartment', -1))
-        self.compartment_increment.clicked.connect(lambda: self.update_number('compartment', 1))
-        self.wheel_decrement.clicked.connect(lambda: self.update_number('wheel', -1))
-        self.wheel_increment.clicked.connect(lambda: self.update_number('wheel', 1))
-
-    def update_number(self, number_type, change):
-        if number_type == 'train':
-            self.trainNumber = max(1, min(20, self.trainNumber + change))
-            self.trainNumber_label.setText(str(self.trainNumber))
-        elif number_type == 'compartment':
-            self.compartmentNumber = max(1, min(8, self.compartmentNumber + change))
-            self.compartmentNumber_label.setText(str(self.compartmentNumber))
-        elif number_type == 'wheel':
-            self.wheelNumber = max(1, min(8, self.wheelNumber + change))
-            self.wheelNumber_label.setText(str(self.wheelNumber))
-
-    def setup_animations(self):
-        self.status_animation = QPropertyAnimation(self.status_indicator, b"windowOpacity")
-        self.status_animation.setDuration(300)
-        self.status_animation.setStartValue(0.7)
-        self.status_animation.setEndValue(1.0)
-
-    def setup_camera_thread(self):
-        self.camera_thread = CameraThread()
-        self.camera_thread.change_pixmap_signal.connect(self.update_image)
-        self.camera_thread.status_signal.connect(self.update_status)
-        self.camera_thread.test_complete_signal.connect(self.handle_test_complete)
-        self.camera_thread.animation_signal.connect(self.trigger_animation)
-        self.camera_thread.enable_buttons_signal.connect(self.set_buttons_enabled)
-        self.camera_thread.start()
-
-    def update_distance(self, distance):
-        self.current_distance = distance
-        self.diameter_label.setText(f"Wheel Diameter: {distance} mm")
-        self.detect_btn.setVisible(False)
-        self.measure_btn.setVisible(False)
-        self.reset_btn.setVisible(True)
-        self.save_btn.setVisible(True)
-        self.diameter_label.show()
-
-    def connect_signals(self):
-        self.detect_btn.clicked.connect(self.detect_flaws)
-        self.measure_btn.clicked.connect(self.measure_diameter)
-        self.save_btn.clicked.connect(self.save_report)
-        self.reset_btn.clicked.connect(self.reset_ui)
-
-    def set_buttons_enabled(self, enabled):
-        # Only enable measure button if we have a test result
-        if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
-            self.measure_btn.setEnabled(enabled)
-        else:
-            self.measure_btn.setEnabled(False)
-        
-        # Only enable save button if we have both test result and measurement
-        if (hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"] and self.current_distance != 680):
-            self.save_btn.setEnabled(enabled)
-        else:
-            self.save_btn.setEnabled(False)
-
-    def trigger_animation(self):
-        self.status_animation.start()
-
-    def update_image(self, qt_image):
-        self.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
-            self.camera_label.width(), self.camera_label.height(),
-            Qt.KeepAspectRatio, Qt.SmoothTransformation
-        ))
-
-    def update_status(self, status, recommendation):
-        if status in ["FLAW DETECTED", "NO FLAW"]:
-            if hasattr(self, 'current_distance'):
-                self.diameter_label.setText("Wheel Diameter: Measure Next")
-            else:
-                self.diameter_label.setText("Wheel Diameter: -")
-            self.diameter_label.show()
-        else:
-            self.diameter_label.hide()
-            
-        self.status_indicator.setText(status)
-        self.recommendation_indicator.setText(recommendation)
-        
-        if status == "FLAW DETECTED":
-            self.status_indicator.setStyleSheet("""
-                QLabel {
-                    color: red;
-                    font-family: 'Montserrat ExtraBold';
-                    font-size: 18px;
-                    padding: 15px 0;
-                }
-            """)
-            self.camera_label.setStyleSheet("""
-                QLabel {
-                    background: black;
-                    border: 4px solid red;
-                }
-            """)
-        elif status == "NO FLAW":
-            self.status_indicator.setStyleSheet("""
-                QLabel {
-                    color: #00CC00;
-                    font-family: 'Montserrat ExtraBold';
-                    font-size: 18px;
-                    padding: 15px 0;
-                }
-            """)
-            self.camera_label.setStyleSheet("""
-                QLabel {
-                    background: black;
-                    border: 4px solid #00CC00;
-                }
-            """)
-        else:
-            self.status_indicator.setStyleSheet("""
-                QLabel {
-                    color: black;
-                    font-family: 'Montserrat ExtraBold';
-                    font-size: 18px;
-                    padding: 15px 0;
-                }
-            """)
-            self.camera_label.setStyleSheet("""
-                QLabel {
-                    background: black;
-                    border: none;
-                }
-            """)
-        
-        self.trigger_animation()
-
-    def detect_flaws(self):
-        self.status_indicator.setText("ANALYZING...")
-        self.status_indicator.setStyleSheet("""
-            QLabel {
-                color: black;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 18px;
-                padding: 15px 0;
-            }
-        """)
-        self.camera_label.setStyleSheet("""
-            QLabel {
-                background: black;
-                border: none;
-            }
-        """)
-        self.diameter_label.hide()
-        
-        # Immediately disable the button for visual feedback
-        self.detect_btn.setEnabled(False)
-        self.measure_btn.setEnabled(False)
-        self.save_btn.setEnabled(False)
-        
-        self.camera_thread.start_test()
-
-    def measure_diameter(self):
-        self.diameter_label.setText("Measuring...")
-        self.diameter_label.show()
-
-        self.detect_btn.setEnabled(False)
-        self.measure_btn.setEnabled(False)
-        self.save_btn.setEnabled(False)
-
-        try:
-            # VL53L0X is handled by Arduino, so this part is removed
-            # self.tof = VL53L0X.VL53L0X()
-            # self.tof.open()
-            # time.sleep(0.1)
-            # self.tof.start_ranging(VL53L0X.Vl53l0xAccuracyMode.GOOD)
-
-            self.sensor_thread = DistanceSensorThread()
-            self.sensor_thread.distance_measured.connect(self.update_distance)
-            self.sensor_thread.measurement_complete.connect(self.on_measurement_complete)
-            self.sensor_thread.error_occurred.connect(self.on_measurement_error)
-            self.sensor_thread.start()
-
-        except Exception as e:
-            print(f"Sensor init error: {e}")
-            self.on_measurement_error("Sensor init error")
-
-    def on_measurement_error(self, error_msg):
-        print(f"Measurement error: {error_msg}")
-        self.on_measurement_complete()
-
-    def on_measurement_complete(self):
-        # After measurement, show Reset and Save buttons
-        self.detect_btn.setVisible(False)
-        self.measure_btn.setVisible(False)
-        self.save_btn.setEnabled(True)
-        self.save_btn.setVisible(True)
-        self.reset_btn.setVisible(True)
-
-    def handle_test_complete(self, image, status, recommendation):
-        # Ensure we have a valid image
-        if image is None or not isinstance(image, np.ndarray) or image.size == 0:
-            print("Error: Invalid image received from test")
-            self.test_image = None
-        else:
-            self.test_image = image.copy()  # Make a copy to ensure we don't lose it
-            
-        self.test_status = status
-        self.test_recommendation = recommendation
-
-        # After detection, show:
-        # - Detect Flaws (disabled)
-        # - Measure Diameter (enabled)
-        self.detect_btn.setEnabled(False)
-        self.detect_btn.setVisible(True)
-        self.measure_btn.setEnabled(True)
-        self.measure_btn.setVisible(True)
-        self.save_btn.setEnabled(False)
-        self.save_btn.setVisible(False)
-        self.reset_btn.setVisible(False)
-
-    def save_report(self):
-        msg = QMessageBox()
-        msg.setWindowTitle("Save Report")
-        msg.setText("Save this inspection report?")
-        msg.setIcon(QMessageBox.Question)
-        msg.setStandardButtons(QMessageBox.Save | QMessageBox.Cancel)
-        msg.setStyleSheet("""
-            QMessageBox {
-                background-color: white;
-                border: 1px solid #ddd;
-                font-family: 'Montserrat';
-            }
-            QLabel {
-                color: black;
-                font-size: 14px;
-            }
-            QPushButton {
-                background-color: #006600;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 14px;
-                min-width: 80px;
-            }
-            QPushButton:hover { background-color: #004400; }
-            #qt_msgbox_buttonbox { border-top: 1px solid #ddd; padding-top: 16px; }
-        """)
-        
-        if msg.exec_() == QMessageBox.Save:
-            # Check if test_image exists and is valid
-            if self.test_image is None or not isinstance(self.test_image, np.ndarray) or self.test_image.size == 0:
-                QMessageBox.critical(self, "Error", "No valid inspection image available to save.")
-                return
-                
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            
-            try:
-                # Convert image to base64
-                success, buffer = cv2.imencode('.jpg', self.test_image)
-                if not success:
-                    raise ValueError("Failed to encode image")
-                    
-                image_base64 = base64.b64encode(buffer).decode('utf-8')
-                
-                report_name = f"Train {self.trainNumber} - Compartment {self.compartmentNumber} - Wheel {self.wheelNumber}"
-                
-                # Send report and check if it was successful
-                success = send_report_to_backend(
-                    status=self.test_status,
-                    recommendation=self.test_recommendation,
-                    image_base64=image_base64,
-                    name=report_name,
-                    trainNumber=self.trainNumber,
-                    compartmentNumber=self.compartmentNumber,
-                    wheelNumber=self.wheelNumber,
-                    wheel_diameter=self.current_distance
-                )
-                
-                if success:
-                    # Only reset if save was successful
-                    self.reset_ui()
-                    QMessageBox.information(self, "Success", "Report saved successfully!")
-                else:
-                    QMessageBox.warning(self, "Warning", "Failed to save report. Please check your connection and try again.")
-                    
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to save report: {str(e)}")
-
-    def reset_ui(self):
-        self.status_indicator.setText("READY")
-        self.recommendation_indicator.setText("")
-        self.diameter_label.setText("Wheel Diameter: -")
-        self.diameter_label.hide()
-        self.status_indicator.setStyleSheet("""
-            QLabel {
-                color: black;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 18px;
-                padding: 15px 0;
-            }
-        """)
-        self.recommendation_indicator.setStyleSheet("""
-            QLabel {
-                color: #666;
-                font-family: 'Montserrat';
-                font-size: 14px;
-                padding: 10px 0;
-            }
-        """)
-        self.camera_label.setStyleSheet("""
-            QLabel {
-                background: black;
-                border: none;
-            }
-        """)
-        
-        # Reset buttons to initial state
-        self.detect_btn.setEnabled(True)
-        self.detect_btn.setVisible(True)
-        self.measure_btn.setEnabled(False)
-        self.measure_btn.setVisible(True)
-        self.save_btn.setEnabled(False)
-        self.save_btn.setVisible(False)
-        self.reset_btn.setVisible(False)
-
-        # Reset data
-        self.current_distance = 680
-        self.test_image = None
-        self.test_status = None
-        self.test_recommendation = None
-        
-        # Reload the model for next use
-        self.camera_thread.load_model()
-
-    def closeEvent(self, event):
-        self.camera_thread.stop()
-        if hasattr(self, 'sensor_thread'):
-            self.sensor_thread.stop()
-        if hasattr(self, 'battery_monitor_thread'):
-            self.battery_monitor_thread.stop()
-        event.accept()
-
-if __name__ == "__main__":
-    os.environ["QT_QUICK_BACKEND"] = "software"
-    os.environ["QT_QPA_PLATFORM"] = "xcb"
-    
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-    
-    palette = app.palette()
-    palette.setColor(palette.Window, QColor(255, 255, 255))
-    palette.setColor(palette.WindowText, QColor(0, 0, 0))
-    palette.setColor(palette.Base, QColor(255, 255, 255))
-    app.setPalette(palette)
-    
-    window = App()
-    window.show()
-    
-    try:
-        os.nice(10)
-    except:
-        pass
-    
-    sys.exit(app.exec_())
-
-class BatteryMonitorThread(QThread):
-    battery_percentage_signal = pyqtSignal(int)
-
-    def __init__(self):
-        super().__init__()
-        self._run_flag = True
-        self.ina219 = INA219()
-
-    def run(self):
-        while self._run_flag:
-            try:
-                bus_voltage = self.ina219.getBusVoltage_V()
-                # Assuming 8.4V is 100% and 7.0V is 0%
-                percentage = ((bus_voltage - 7.0) / (8.4 - 7.0)) * 100
-                percentage = max(0, min(100, int(percentage)))
-                self.battery_percentage_signal.emit(percentage)
-            except Exception as e:
-                print(f"Error reading battery data: {e}")
-                self.battery_percentage_signal.emit(-1) # Emit -1 to indicate error
-            time.sleep(5) # Update every 5 seconds
-
-    def stop(self):
-        self._run_flag = False
-        self.wait()
