@@ -783,6 +783,12 @@ class App(QMainWindow):
         self.battery_monitor_thread.battery_percentage_signal.connect(self.update_battery_percentage)
         self.battery_monitor_thread.start()
 
+    def update_battery_percentage(self, percentage):
+        if percentage == -1:
+            self.battery_label.setText("Battery: Error")
+        else:
+            self.battery_label.setText(f"Battery: {percentage}%")
+
     def setup_number_controls(self):
         self.train_decrement.clicked.connect(self.decrement_train_number)
         self.train_increment.clicked.connect(self.increment_train_number)
@@ -1410,9 +1416,3 @@ class BatteryMonitorThread(QThread):
     def stop(self):
         self._run_flag = False
         self.wait()
-
-    def update_battery_percentage(self, percentage):
-        if percentage == -1:
-            self.battery_label.setText("Battery: Error")
-        else:
-            self.battery_label.setText(f"Battery: {percentage}%")
