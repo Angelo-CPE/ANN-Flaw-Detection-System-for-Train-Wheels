@@ -22,7 +22,7 @@ except ImportError:
     print("VL53L0X library not found. Distance measurement will be simulated.")
     VL53L0X = None
 
-def send_report_to_backend(status, recommendation, image_base64, name=None, trainNumber=None, compartmentNumber=None, wheelNumber=None, wheel_diameter=None):
+def send_report_to_backend(status, recommendation, image_base64, name=None, trainNumber=None, compartmentNumber=None, wheelNumber=None, wheel_diameter=None, token=None):
     # Validate status before sending
     if status not in ["FLAW DETECTED", "NO FLAW"]:
         print("Invalid status, defaulting to 'NO FLAW'")
@@ -30,7 +30,7 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
         recommendation = "For Constant Monitoring"
 
     import tempfile
-    backend_url = "https://ann-flaw-detection-system-for-train.onrender.com/api/reports"  # Updated endpoint
+    backend_url = "https://ann-flaw-detection-system-for-train.onrender.com/api/reports"
 
     try:
         # Create a temporary image file from base64
@@ -52,10 +52,18 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
                 'wheelNumber': str(wheelNumber),
                 'wheel_diameter': str(wheel_diameter)
             }
+            headers = {
+                'Authorization': f'Bearer {token}'
+            } if token else {}
 
-            # Add timeout and better error handling
             try:
-                response = requests.post(backend_url, files=files, data=data, timeout=10)
+                response = requests.post(
+                    backend_url, 
+                    files=files, 
+                    data=data, 
+                    headers=headers,
+                    timeout=10
+                )
                 
                 if response.status_code == 201:
                     print("Report sent successfully!")
