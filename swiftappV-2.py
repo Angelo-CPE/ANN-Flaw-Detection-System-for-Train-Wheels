@@ -391,7 +391,6 @@ class App(QMainWindow):
         self.camera_label.setStyleSheet("QLabel { background: black; border: none; }")
         
         # Add widgets to camera layout
-        self.camera_layout.addWidget(self.camera_title)
         self.camera_layout.addWidget(self.camera_label)
         
         # Control Panel (bottom section)
