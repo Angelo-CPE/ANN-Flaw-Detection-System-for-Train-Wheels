@@ -362,10 +362,10 @@ class SelectionPage(QWidget):
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(20, 10, 20, 20)   # less top padding
-        self.layout.setSpacing(10)   
+        self.layout.setContentsMargins(20, 5, 20, 15)  # Reduced top and bottom margins
+        self.layout.setSpacing(5)   
         
-        # Back Button (unchanged)
+        # Back Button - made more compact
         self.back_button = QPushButton("← Back")
         self.back_button.setStyleSheet("""
             QPushButton {
@@ -373,10 +373,10 @@ class SelectionPage(QWidget):
                 color: #333;
                 border: 1px solid #ddd;
                 border-radius: 5px;
-                padding: 8px 15px;
+                padding: 5px 10px;
                 font-family: 'Montserrat SemiBold';
                 font-size: 14px;
-                min-width: 80px;
+                min-width: 70px;
             }
             QPushButton:hover {
                 background: #e60000;
@@ -390,23 +390,22 @@ class SelectionPage(QWidget):
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
         self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
-        # Logo - with reduced size and spacing
+        # Logo - reduced spacing
         self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignCenter)
         logo_pixmap = QPixmap('logo.png')
         if not logo_pixmap.isNull():
-            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(80, Qt.SmoothTransformation))
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(70, Qt.SmoothTransformation))  # Slightly smaller logo
         self.layout.addWidget(self.logo_label)
-        self.layout.addSpacing(5)  # Reduced spacing from 10 to 5 after logo
         
         # Main content container
         content_frame = QFrame()
         content_frame.setStyleSheet("QFrame { background: transparent; }")
         content_layout = QVBoxLayout()
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(15)
+        content_layout.setContentsMargins(10, 5, 10, 5)  # Reduced inner margins
+        content_layout.setSpacing(10)  # Reduced spacing
         
-        # Section title
+        # Section title - made more compact
         section_title = QLabel("SELECT INSPECTION DETAILS")
         section_title.setAlignment(Qt.AlignCenter)
         section_title.setStyleSheet("""
@@ -414,21 +413,23 @@ class SelectionPage(QWidget):
                 font-family: 'Montserrat Bold';
                 font-size: 18px;
                 color: #333;
-                padding-bottom: 5px;
+                padding-bottom: 3px;
                 border-bottom: 2px solid #e60000;
+                margin-bottom: 5px;
             }
         """)
         content_layout.addWidget(section_title)
         
-        # Train Selection
+        # Train Selection - reduced spacing
         self.train_layout = QVBoxLayout()
-        self.train_layout.setSpacing(0)
+        self.train_layout.setSpacing(2)  # Reduced from 0 to 2 for slight separation
         self.train_label = QLabel("Train Number")
         self.train_label.setStyleSheet("""
             QLabel {
                 font-family: 'Montserrat SemiBold';
                 font-size: 16px;
                 color: #555;
+                margin-bottom: 2px;
             }
         """)
         self.train_layout.addWidget(self.train_label)
@@ -462,20 +463,22 @@ class SelectionPage(QWidget):
                 font-family: 'Montserrat Bold';
                 font-size: 20px;
                 color: #e60000;
+                margin-top: 2px;
             }
         """)
         self.train_layout.addWidget(self.train_value)
         content_layout.addLayout(self.train_layout)
         
-        # Compartment Selection
+        # Compartment Selection - reduced spacing
         self.compartment_layout = QVBoxLayout()
-        self.compartment_layout.setSpacing(0)
+        self.compartment_layout.setSpacing(2)
         self.compartment_label = QLabel("Compartment Number")
         self.compartment_label.setStyleSheet("""
             QLabel {
                 font-family: 'Montserrat SemiBold';
                 font-size: 16px;
                 color: #555;
+                margin-bottom: 2px;
             }
         """)
         self.compartment_layout.addWidget(self.compartment_label)
@@ -492,15 +495,16 @@ class SelectionPage(QWidget):
         self.compartment_layout.addWidget(self.compartment_value)
         content_layout.addLayout(self.compartment_layout)
         
-        # Wheel Selection
+        # Wheel Selection - reduced spacing
         self.wheel_layout = QVBoxLayout()
-        self.wheel_layout.setSpacing(0)
+        self.wheel_layout.setSpacing(2)
         self.wheel_label = QLabel("Wheel Number")
         self.wheel_label.setStyleSheet("""
             QLabel {
                 font-family: 'Montserrat SemiBold';
                 font-size: 16px;
                 color: #555;
+                margin-bottom: 2px;
             }
         """)
         self.wheel_layout.addWidget(self.wheel_label)
@@ -517,7 +521,7 @@ class SelectionPage(QWidget):
         self.wheel_layout.addWidget(self.wheel_value)
         content_layout.addLayout(self.wheel_layout)
         
-        # Start Button
+        # Start Button - same size but with reduced top margin
         self.start_button = QPushButton("START INSPECTION")
         self.start_button.setStyleSheet("""
             QPushButton {
@@ -528,7 +532,7 @@ class SelectionPage(QWidget):
                 padding: 12px;
                 font-family: 'Montserrat Bold';
                 font-size: 18px;
-                margin-top: 10px;
+                margin-top: 5px;
                 min-height: 50px;
             }
             QPushButton:hover {
