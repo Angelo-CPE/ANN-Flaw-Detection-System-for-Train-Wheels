@@ -397,7 +397,7 @@ class SelectionPage(QWidget):
         if not logo_pixmap.isNull():
             self.logo_label.setPixmap(logo_pixmap.scaledToHeight(60, Qt.SmoothTransformation))
         self.layout.addWidget(self.logo_label)
-        self.layout.addSpacing(5)  # Reduced spacing from 10 to 5 after logo
+        self.layout.addSpacing(2)  # Reduced spacing from 10 to 5 after logo
         
         # Main content container
         content_frame = QFrame()
