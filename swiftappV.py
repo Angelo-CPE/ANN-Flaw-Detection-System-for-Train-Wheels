@@ -287,26 +287,21 @@ class HomePage(QWidget):
     def setup_ui(self):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(30, 30, 30, 30)
-        self.layout.setSpacing(10)  # Reduced spacing
+        self.layout.setSpacing(20)
         
         # Logo
-        self.logo_label = QLabel("SWIFT")
+        self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignCenter)
-        self.logo_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat Bold';
-                font-size: 36px;
-                color: #e60000;
-                margin-bottom: 30px;
-            }
-        """)
+        logo_pixmap = QPixmap('logo.png')
+        if not logo_pixmap.isNull():
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(100, Qt.SmoothTransformation))
         self.layout.addWidget(self.logo_label)
         
         # Buttons
         self.button_layout = QVBoxLayout()
-        self.button_layout.setSpacing(15)  # Reduced spacing
+        self.button_layout.setSpacing(20)
         
-        # Inspection Button
+        # 1. Inspection Button
         self.inspection_btn = QPushButton("INSPECTION")
         self.inspection_btn.setStyleSheet("""
             QPushButton {
@@ -314,10 +309,9 @@ class HomePage(QWidget):
                 color: white;
                 border: none;
                 border-radius: 10px;
-                padding: 20px;
+                padding: 15px;
                 font-family: 'Montserrat Bold';
-                font-size: 24px;
-                min-width: 250px;
+                font-size: 18px;
             }
             QPushButton:hover {
                 background-color: #cc0000;
@@ -327,9 +321,9 @@ class HomePage(QWidget):
             }
         """)
         self.inspection_btn.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(1))
-        self.button_layout.addWidget(self.inspection_btn, alignment=Qt.AlignCenter)
+        self.button_layout.addWidget(self.inspection_btn)
         
-        # Calibration Button
+        # 2. Calibration Button
         self.calibration_btn = QPushButton("CALIBRATION")
         self.calibration_btn.setStyleSheet("""
             QPushButton {
@@ -337,10 +331,9 @@ class HomePage(QWidget):
                 color: white;
                 border: none;
                 border-radius: 10px;
-                padding: 20px;
+                padding: 15px;
                 font-family: 'Montserrat Bold';
-                font-size: 24px;
-                min-width: 250px;
+                font-size: 18px;
             }
             QPushButton:hover {
                 background-color: #111;
@@ -350,23 +343,10 @@ class HomePage(QWidget):
             }
         """)
         self.calibration_btn.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(3))
-        self.button_layout.addWidget(self.calibration_btn, alignment=Qt.AlignCenter)
+        self.button_layout.addWidget(self.calibration_btn)
         
         self.layout.addLayout(self.button_layout)
-        
-        # Version label at bottom
-        self.version_label = QLabel("T39v1.0")
-        self.version_label.setAlignment(Qt.AlignCenter)
-        self.version_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat Regular';
-                font-size: 14px;
-                color: #666;
-                margin-top: 30px;
-            }
-        """)
-        self.layout.addWidget(self.version_label)
-        
+        self.layout.addStretch(1)
         self.setLayout(self.layout)
 
 class SelectionPage(QWidget):
@@ -377,59 +357,63 @@ class SelectionPage(QWidget):
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(30, 10, 30, 30)
-        self.layout.setSpacing(5)
+        self.layout.setContentsMargins(30, 10, 30, 30)  # Reduced top margin from 20 to 10
+        self.layout.setSpacing(10)  # Reduced spacing from 15 to 10
         
-        # Back Button
+        # Back Button (unchanged)
         self.back_button = QPushButton("← Back")
         self.back_button.setStyleSheet("""
             QPushButton {
-                background: transparent;
+                background: #f0f0f0;
                 color: #333;
-                border: none;
-                padding: 5px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                padding: 8px 15px;
                 font-family: 'Montserrat SemiBold';
                 font-size: 14px;
                 min-width: 80px;
             }
             QPushButton:hover {
-                color: #e60000;
+                background: #e60000;
+                color: white;
+                border-color: #e60000;
+            }
+            QPushButton:pressed {
+                background: #b30000;
             }
         """)
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
         self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
-        # Title
-        self.title_label = QLabel("SWIFT>")
-        self.title_label.setAlignment(Qt.AlignLeft)
-        self.title_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat Bold';
-                font-size: 24px;
-                color: #e60000;
-                margin-bottom: 10px;
-            }
-        """)
-        self.layout.addWidget(self.title_label)
+        # Logo - with reduced size and spacing
+        self.logo_label = QLabel()
+        self.logo_label.setAlignment(Qt.AlignCenter)
+        logo_pixmap = QPixmap('logo.png')
+        if not logo_pixmap.isNull():
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(60, Qt.SmoothTransformation))
+        self.layout.addWidget(self.logo_label)
+        self.layout.addSpacing(5)  # Reduced spacing from 10 to 5 after logo
+        
+        # Main content container
+        content_frame = QFrame()
+        content_frame.setStyleSheet("QFrame { background: transparent; }")
+        content_layout = QVBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(15)
         
         # Section title
         section_title = QLabel("SELECT INSPECTION DETAILS")
-        section_title.setAlignment(Qt.AlignLeft)
+        section_title.setAlignment(Qt.AlignCenter)
         section_title.setStyleSheet("""
             QLabel {
                 font-family: 'Montserrat Bold';
                 font-size: 18px;
                 color: #333;
-                margin-bottom: 20px;
+                padding-bottom: 5px;
+                border-bottom: 2px solid #e60000;
             }
         """)
-        self.layout.addWidget(section_title)
-        
-        content_frame = QFrame()
-        content_frame.setStyleSheet("background: white; border: none;")
-        content_layout = QVBoxLayout()
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(10)
+        content_layout.addWidget(section_title)
         
         # Train Selection
         self.train_layout = QVBoxLayout()
@@ -528,7 +512,7 @@ class SelectionPage(QWidget):
         self.wheel_layout.addWidget(self.wheel_value)
         content_layout.addLayout(self.wheel_layout)
         
-        # Start Button with increased top margin
+        # Start Button
         self.start_button = QPushButton("START INSPECTION")
         self.start_button.setStyleSheet("""
             QPushButton {
@@ -536,10 +520,10 @@ class SelectionPage(QWidget):
                 color: white;
                 border: none;
                 border-radius: 8px;
-                padding: 15px;
+                padding: 12px;
                 font-family: 'Montserrat Bold';
                 font-size: 18px;
-                margin-top: 30px;
+                margin-top: 10px;
                 min-height: 50px;
             }
             QPushButton:hover {
@@ -550,9 +534,7 @@ class SelectionPage(QWidget):
             }
         """)
         self.start_button.clicked.connect(self.start_inspection)
-        self.layout.addWidget(self.start_button)
-        
-        self.layout.addStretch(1)
+        content_layout.addWidget(self.start_button)
         
         content_frame.setLayout(content_layout)
         self.layout.addWidget(content_frame, stretch=1)
@@ -574,57 +556,37 @@ class InspectionPage(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.setup_ui()
+        self.setup_animations()
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.layout.setSpacing(10)
         
-        # Header with back button and title
-        header_layout = QHBoxLayout()
-        
+        # Back Button
         self.back_button = QPushButton("← Back")
         self.back_button.setStyleSheet("""
             QPushButton {
-                background: transparent;
+                background: #f0f0f0;
                 color: #333;
-                border: none;
-                padding: 5px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                padding: 8px 15px;
                 font-family: 'Montserrat SemiBold';
                 font-size: 14px;
+                min-width: 80px;
             }
             QPushButton:hover {
-                color: #e60000;
+                background: #e60000;
+                color: white;
+                border-color: #e60000;
+            }
+            QPushButton:pressed {
+                background: #b30000;
             }
         """)
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
-        header_layout.addWidget(self.back_button)
-        
-        self.title_label = QLabel("SWIFT→")
-        self.title_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat Bold';
-                font-size: 18px;
-                color: #e60000;
-            }
-        """)
-        header_layout.addWidget(self.title_label, alignment=Qt.AlignRight)
-        
-        self.layout.addLayout(header_layout)
-        
-        # Selection label
-        self.selection_label = QLabel()
-        self.selection_label.setAlignment(Qt.AlignCenter)
-        self.selection_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat SemiBold';
-                font-size: 16px;
-                color: #333;
-                margin-bottom: 10px;
-            }
-        """)
-        self.update_selection_label()
-        self.layout.addWidget(self.selection_label)
+        self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
         # Camera Panel - Modified to take more space
         self.camera_panel = QFrame()
