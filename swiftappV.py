@@ -413,7 +413,7 @@ class SelectionPage(QWidget):
         """)
         self.layout.addWidget(self.title_label)
         
-        # Train Selection
+        # Train Selection - Modified slider handle size
         self.train_layout = QVBoxLayout()
         self.train_layout.setSpacing(5)
         self.train_label = QLabel("Select Train Number")
@@ -431,19 +431,19 @@ class SelectionPage(QWidget):
         self.train_slider.setValue(1)
         self.train_slider.setStyleSheet("""
             QSlider {
-                height: 40px;
+                height: 50px;  /* Increased height */
             }
             QSlider::groove:horizontal {
-                height: 8px;
+                height: 10px;  /* Increased groove height */
                 background: #ddd;
-                border-radius: 4px;
+                border-radius: 5px;
             }
             QSlider::handle:horizontal {
-                width: 24px;
-                height: 24px;
-                margin: -8px 0;
+                width: 30px;   /* Increased handle width */
+                height: 30px;  /* Increased handle height */
+                margin: -10px 0;  /* Adjusted margin */
                 background: #e60000;
-                border-radius: 12px;
+                border-radius: 15px;  /* Increased radius */
             }
         """)
         self.train_layout.addWidget(self.train_slider)
@@ -460,7 +460,7 @@ class SelectionPage(QWidget):
         self.train_layout.addWidget(self.train_value)
         self.layout.addLayout(self.train_layout)
         
-        # Compartment Selection
+        # Compartment Selection - Same slider modifications
         self.compartment_layout = QVBoxLayout()
         self.compartment_layout.setSpacing(5)
         self.compartment_label = QLabel("Select Compartment Number")
@@ -485,7 +485,7 @@ class SelectionPage(QWidget):
         self.compartment_layout.addWidget(self.compartment_value)
         self.layout.addLayout(self.compartment_layout)
         
-        # Wheel Selection
+        # Wheel Selection - Same slider modifications
         self.wheel_layout = QVBoxLayout()
         self.wheel_layout.setSpacing(5)
         self.wheel_label = QLabel("Select Wheel Number")
@@ -578,7 +578,7 @@ class InspectionPage(QWidget):
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(1))
         self.layout.addWidget(self.back_button)
         
-        # Camera Panel
+        # Camera Panel - Modified to take more space
         self.camera_panel = QFrame()
         self.camera_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.camera_layout = QVBoxLayout()
@@ -587,12 +587,12 @@ class InspectionPage(QWidget):
         self.camera_label = QLabel()
         self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.camera_label.setMinimumSize(320, 240)
+        self.camera_label.setMinimumSize(480, 360)  # Increased minimum size
         self.camera_label.setStyleSheet("QLabel { background: black; border: none; }")
         
         self.camera_layout.addWidget(self.camera_label)
         self.camera_panel.setLayout(self.camera_layout)
-        self.layout.addWidget(self.camera_panel, 60)
+        self.layout.addWidget(self.camera_panel, 70)  # Increased weight to 70
         
         # Control Panel
         self.control_panel = QFrame()
@@ -678,25 +678,27 @@ class InspectionPage(QWidget):
         self.status_panel.setLayout(self.status_layout)
         self.control_layout.addWidget(self.status_panel)
         
-        # Button Panel
+        # Button Panel - Modified for horizontal layout
         self.button_panel = QFrame()
         self.button_panel.setStyleSheet("QFrame { background: white; border: none; }")
-        self.button_layout = QVBoxLayout()
+        self.button_layout = QHBoxLayout()  # Changed to QHBoxLayout
         self.button_layout.setContentsMargins(10, 10, 10, 10)
-        self.button_layout.setSpacing(10)
+        self.button_layout.setSpacing(15)
         
-        # 1. Detect Flaws Button
-        self.detect_btn = QPushButton("DETECT FLAWS")
+        # 1. Detect Flaws Button - Modified to be more square
+        self.detect_btn = QPushButton("DETECT\nFLAWS")  # Added line break
         self.detect_btn.setCursor(Qt.PointingHandCursor)
         self.detect_btn.setStyleSheet("""
             QPushButton {
                 background-color: #e60000;
                 color: white;
                 border: none;
-                padding: 15px;
+                padding: 20px;
                 font-family: 'Montserrat Bold';
-                font-size: 16px;
+                font-size: 18px;
                 border-radius: 8px;
+                min-width: 120px;
+                min-height: 100px;
             }
             QPushButton:hover { background-color: #cc0000; }
             QPushButton:pressed { background-color: #b30000; }
@@ -706,8 +708,8 @@ class InspectionPage(QWidget):
             }
         """)
         
-        # 2. Measure Diameter Button
-        self.measure_btn = QPushButton("MEASURE DIAMETER")
+        # 2. Measure Diameter Button - Modified to be more square
+        self.measure_btn = QPushButton("MEASURE\nDIAMETER")  # Added line break
         self.measure_btn.setEnabled(False)
         self.measure_btn.setCursor(Qt.PointingHandCursor)
         self.measure_btn.setStyleSheet("""
@@ -715,10 +717,12 @@ class InspectionPage(QWidget):
                 background-color: #333;
                 color: white;
                 border: none;
-                padding: 15px;
+                padding: 20px;
                 font-family: 'Montserrat Bold';
-                font-size: 16px;
+                font-size: 18px;
                 border-radius: 8px;
+                min-width: 120px;
+                min-height: 100px;
             }
             QPushButton:disabled {
                 background-color: #888;
@@ -728,8 +732,8 @@ class InspectionPage(QWidget):
             QPushButton:pressed { background-color: #000; }
         """)
         
-        # 3. Save Report Button
-        self.save_btn = QPushButton("SAVE REPORT")
+        # 3. Save Report Button - Modified to be more square
+        self.save_btn = QPushButton("SAVE\nREPORT")  # Added line break
         self.save_btn.setEnabled(False)
         self.save_btn.setVisible(False)
         self.save_btn.setCursor(Qt.PointingHandCursor)
@@ -738,10 +742,12 @@ class InspectionPage(QWidget):
                 background-color: #006600;
                 color: white;
                 border: none;
-                padding: 15px;
+                padding: 20px;
                 font-family: 'Montserrat Bold';
-                font-size: 16px;
+                font-size: 18px;
                 border-radius: 8px;
+                min-width: 120px;
+                min-height: 100px;
             }
             QPushButton:disabled {
                 background-color: #888;
@@ -751,8 +757,8 @@ class InspectionPage(QWidget):
             QPushButton:pressed { background-color: #002200; }
         """)
         
-        # 4. Reset Button
-        self.reset_btn = QPushButton("NEW INSPECTION")
+        # 4. Reset Button - Modified to be more square
+        self.reset_btn = QPushButton("NEW\nINSPECTION")  # Added line break
         self.reset_btn.setVisible(False)
         self.reset_btn.setCursor(Qt.PointingHandCursor)
         self.reset_btn.setStyleSheet("""
@@ -760,24 +766,30 @@ class InspectionPage(QWidget):
                 background-color: #444;
                 color: white;
                 border: none;
-                padding: 15px;
+                padding: 20px;
                 font-family: 'Montserrat Bold';
-                font-size: 16px;
+                font-size: 18px;
                 border-radius: 8px;
+                min-width: 120px;
+                min-height: 100px;
             }
             QPushButton:hover { background-color: #222; }
             QPushButton:pressed { background-color: #111; }
         """)
         
+        # Add stretch to center the buttons
+        self.button_layout.addStretch(1)
         self.button_layout.addWidget(self.detect_btn)
         self.button_layout.addWidget(self.measure_btn)
         self.button_layout.addWidget(self.save_btn)
         self.button_layout.addWidget(self.reset_btn)
+        self.button_layout.addStretch(1)
+        
         self.button_panel.setLayout(self.button_layout)
         self.control_layout.addWidget(self.button_panel)
         
         self.control_panel.setLayout(self.control_layout)
-        self.layout.addWidget(self.control_panel, 40)
+        self.layout.addWidget(self.control_panel, 30)  # Reduced weight to 30
         self.setLayout(self.layout)
         
         # Connect signals
