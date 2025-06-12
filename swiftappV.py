@@ -78,6 +78,55 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
         if os.path.exists(temp_img_path):
             os.remove(temp_img_path)
 
+class CalibrationSerialThread(QThread):
+    distance_measured = pyqtSignal(float)  # Raw distance in mm
+    measurement_complete = pyqtSignal()
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, port='/dev/ttyACM0', baudrate=115200):
+        super().__init__()
+        self._run_flag = True
+        self.port = port
+        self.baudrate = baudrate
+        self.serial_conn = None
+
+    def run(self):
+        try:
+            self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=1)
+            time.sleep(2)  # Wait for Arduino to initialize
+            
+            valid_readings = []
+            start_time = time.time()
+            
+            # Collect readings for 2 seconds
+            while time.time() - start_time < 2.0 and self._run_flag:
+                if self.serial_conn.in_waiting > 0:
+                    line = self.serial_conn.readline().decode('utf-8').strip()
+                    try:
+                        distance = float(line)
+                        if distance > 0:  # Ignore error values
+                            valid_readings.append(distance)
+                            self.distance_measured.emit(distance)
+                    except ValueError:
+                        pass
+                time.sleep(0.01)
+                
+            # Calculate median of valid readings
+            if valid_readings:
+                median_distance = float(np.median(valid_readings))
+                self.distance_measured.emit(median_distance)
+                
+        except Exception as e:
+            self.error_occurred.emit(str(e))
+        finally:
+            if self.serial_conn and self.serial_conn.is_open:
+                self.serial_conn.close()
+            self.measurement_complete.emit()
+
+    def stop(self):
+        self._run_flag = False
+        self.wait()
+
 class SerialReaderThread(QThread):
     diameter_measured = pyqtSignal(float)  # Changed to float for precise diameter
     measurement_complete = pyqtSignal()
@@ -972,7 +1021,7 @@ class CalibrationPage(QWidget):
             self.calib_600_reading.setText("Measuring...")
         
         try:
-            self.serial_thread = SerialReaderThread()
+            self.serial_thread = CalibrationSerialThread()
             self.serial_thread.distance_measured.connect(lambda dist: self.update_reading(wheel_type, dist))
             self.serial_thread.measurement_complete.connect(lambda: self.on_measurement_complete(wheel_type))
             self.serial_thread.error_occurred.connect(self.handle_serial_error)
@@ -1173,24 +1222,19 @@ class App(QMainWindow):
             self.serial_thread = SerialReaderThread()
             self.serial_thread.diameter_measured.connect(self.update_diameter)
             self.serial_thread.measurement_complete.connect(self.on_diameter_measurement_complete)
-            self.serial_thread.error_occurred.connect(self.on_diameter_measurement_error)
+            self.serial_thread.error_occurred.connect(self.handle_measurement_error)  # Changed to handle_measurement_error
             self.serial_thread.start()
 
         except Exception as e:
             print(f"Serial connection error: {e}")
-            self.on_diameter_measurement_error(f"Serial error: {str(e)}")
+            self.handle_measurement_error(f"Serial error: {str(e)}")
 
-    def update_diameter(self, diameter):
-        # Store the precise diameter measurement with 2 decimal places
-        self.current_distance = round(diameter, 2)
-        self.inspection_page.diameter_label.setText(f"Wheel Diameter: {self.current_distance:.2f} mm")
-        
-    def on_measurement_error(self, error_msg):
+    def handle_measurement_error(self, error_msg):  # New method to handle errors
         print(f"Measurement error: {error_msg}")
         self.inspection_page.diameter_label.setText("Measurement Error")
-        self.on_measurement_complete()
+        self.on_diameter_measurement_complete()
 
-    def on_measurement_complete(self):
+    def on_diameter_measurement_complete(self):  # Renamed from on_measurement_complete
         # After measurement, show Reset and Save buttons
         self.inspection_page.detect_btn.setVisible(False)
         self.inspection_page.measure_btn.setVisible(False)
