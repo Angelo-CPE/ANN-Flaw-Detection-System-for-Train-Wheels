@@ -371,6 +371,20 @@ class App(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.central_widget.setStyleSheet("background: white;")
         
+        # Main vertical layout
+        self.main_layout = QVBoxLayout()
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(0)
+        self.central_widget.setLayout(self.main_layout)
+        
+        # Camera Panel (top section)
+        self.camera_panel = QFrame()
+        self.camera_panel.setStyleSheet("QFrame { background: white; border: none; }")
+        self.camera_layout = QVBoxLayout()
+        self.camera_layout.setContentsMargins(0, 0, 0, 0)
+        self.camera_layout.setSpacing(0)
+        
+        # Camera title - moved after camera_layout is defined
         self.camera_title = QLabel("WHEEL INSPECTION CAMERA")
         self.camera_title.setAlignment(Qt.AlignCenter)
         self.camera_title.setStyleSheet("""
@@ -378,31 +392,20 @@ class App(QMainWindow):
                 color: #333;
                 font-family: 'Montserrat Bold';
                 font-size: 18px;
-                padding: 5px 0;
+                padding: 10px 0;
+                background: #f8f8f8;
+                border-bottom: 1px solid #ddd;
             }
         """)
-        self.camera_layout.addWidget(self.camera_title)
-        self.camera_layout.addWidget(self.camera_label)
-
-        # Main vertical layout (changed from QHBoxLayout)
-        self.main_layout = QVBoxLayout()
-        self.main_layout.setContentsMargins(10, 10, 10, 10)
-        self.main_layout.setSpacing(10)
-        self.central_widget.setLayout(self.main_layout)
-        
-        # Camera Panel (now at top)
-        self.camera_panel = QFrame()
-        self.camera_panel.setStyleSheet("QFrame { background: white; border: none; }")
-        self.camera_layout = QVBoxLayout()
-        self.camera_layout.setContentsMargins(0, 0, 0, 0)
-        self.camera_layout.setSpacing(10)
         
         self.camera_label = QLabel()
         self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.camera_label.setMinimumSize(640, 480)  # Slightly larger for top placement
+        self.camera_label.setMinimumSize(640, 480)
         self.camera_label.setStyleSheet("QLabel { background: black; border: none; }")
         
+        # Add widgets to camera layout
+        self.camera_layout.addWidget(self.camera_title)
         self.camera_layout.addWidget(self.camera_label)
         self.camera_panel.setLayout(self.camera_layout)
         
