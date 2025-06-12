@@ -542,6 +542,27 @@ app.put('/api/admin/users/:id/deactivate', protect, authorize('admin'), async (r
   }
 });
 
+app.patch('/api/admin/users/:id/demote', protect, authorize('admin'), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.role !== 'admin') {
+      return res.status(400).json({ error: 'User is not an admin' });
+    }
+
+    user.role = 'user';
+    await user.save();
+
+    res.json({ success: true, data: user });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.put('/api/admin/users/:id/reactivate', protect, authorize('admin'), async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(
