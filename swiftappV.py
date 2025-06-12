@@ -14,13 +14,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
                             QGridLayout, QStackedWidget, QSlider)
 from PyQt5.QtGui import QImage, QPixmap, QFont, QColor, QPainter, QPen, QFontDatabase, QIcon
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve
-
-# Import VL53L0X library
-try:
-    import VL53L0X
-except ImportError:
-    print("VL53L0X library not found. Distance measurement will be simulated.")
-    VL53L0X = None
+import serial
 
 def send_report_to_backend(status, recommendation, image_base64, name=None, trainNumber=None, compartmentNumber=None, wheelNumber=None, wheel_diameter=None, token=None):
     # Validate status before sending
@@ -84,32 +78,48 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
         if os.path.exists(temp_img_path):
             os.remove(temp_img_path)
 
-class DistanceSensorThread(QThread):
+class SerialReaderThread(QThread):
     distance_measured = pyqtSignal(int)
     measurement_complete = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, tof):
+    def __init__(self, port='/dev/ttyACM0', baudrate=9600):
         super().__init__()
         self._run_flag = True
-        self.tof = tof
+        self.port = port
+        self.baudrate = baudrate
+        self.serial_conn = None
 
     def run(self):
         try:
+            self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=1)
+            time.sleep(2)  # Wait for Arduino to initialize
+            
             start_time = time.time()
-            while time.time() - start_time < 1.0 and self._run_flag:
-                distance = self.tof.get_distance()
-                if distance > 0:
-                    self.distance_measured.emit(distance)
-                time.sleep(0.05)
+            valid_readings = []
+            
+            while time.time() - start_time < 2.0 and self._run_flag:  # Measure for 2 seconds
+                if self.serial_conn.in_waiting > 0:
+                    line = self.serial_conn.readline().decode('utf-8').strip()
+                    try:
+                        distance = int(line)
+                        if distance > 0:  # Ignore error values (0)
+                            valid_readings.append(distance)
+                            self.distance_measured.emit(distance)
+                    except ValueError:
+                        pass
+                time.sleep(0.01)
+                
+            # Calculate median of valid readings
+            if valid_readings:
+                median_distance = int(np.median(valid_readings))
+                self.distance_measured.emit(median_distance)
+                
         except Exception as e:
             self.error_occurred.emit(str(e))
         finally:
-            try:
-                self.tof.stop_ranging()
-                self.tof.close()
-            except Exception as e:
-                print(f"Sensor cleanup error: {e}")
+            if self.serial_conn and self.serial_conn.is_open:
+                self.serial_conn.close()
             self.measurement_complete.emit()
 
     def stop(self):
@@ -846,7 +856,7 @@ class App(QMainWindow):
         self.trainNumber = 1
         self.compartmentNumber = 1
         self.wheelNumber = 1
-        self.current_distance = 680
+        self.current_distance = 0
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
@@ -993,32 +1003,23 @@ class App(QMainWindow):
         self.inspection_page.save_btn.setEnabled(False)
 
         try:
-            self.tof = VL53L0X.VL53L0X()
-            self.tof.open()
-            time.sleep(0.1)
-            self.tof.start_ranging(VL53L0X.Vl53l0xAccuracyMode.GOOD)
-
-            self.sensor_thread = DistanceSensorThread(self.tof)
-            self.sensor_thread.distance_measured.connect(self.update_distance)
-            self.sensor_thread.measurement_complete.connect(self.on_measurement_complete)
-            self.sensor_thread.error_occurred.connect(self.on_measurement_error)
-            self.sensor_thread.start()
+            self.serial_thread = SerialReaderThread()
+            self.serial_thread.distance_measured.connect(self.update_distance)
+            self.serial_thread.measurement_complete.connect(self.on_measurement_complete)
+            self.serial_thread.error_occurred.connect(self.on_measurement_error)
+            self.serial_thread.start()
 
         except Exception as e:
-            print(f"Sensor init error: {e}")
-            self.on_measurement_error("Sensor init error")
+            print(f"Serial connection error: {e}")
+            self.on_measurement_error(f"Serial error: {str(e)}")
 
     def update_distance(self, distance):
         self.current_distance = distance
         self.inspection_page.diameter_label.setText(f"Wheel Diameter: {distance} mm")
-        self.inspection_page.detect_btn.setVisible(False)
-        self.inspection_page.measure_btn.setVisible(False)
-        self.inspection_page.reset_btn.setVisible(True)
-        self.inspection_page.save_btn.setVisible(True)
-        self.inspection_page.diameter_label.show()
-
+        
     def on_measurement_error(self, error_msg):
         print(f"Measurement error: {error_msg}")
+        self.inspection_page.diameter_label.setText("Measurement Error")
         self.on_measurement_complete()
 
     def on_measurement_complete(self):
@@ -1177,7 +1178,7 @@ class App(QMainWindow):
         self.inspection_page.reset_btn.setVisible(False)
 
         # Reset data
-        self.current_distance = 680
+        self.current_distance = 0
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
