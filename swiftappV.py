@@ -600,37 +600,25 @@ class InspectionPage(QWidget):
         # Main content area
         self.main_content = QFrame()
         self.main_content.setStyleSheet("QFrame { background: transparent; }")
-        self.main_layout = QHBoxLayout()
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(10)
         
         # Camera Panel - Fixed size
         self.camera_panel = QFrame()
         self.camera_panel.setStyleSheet("QFrame { background: white; border: 3px solid transparent; }")
-        self.camera_panel.setFixedSize(480, 360)  # Fixed size to prevent movement
-        self.camera_layout = QVBoxLayout()
-        self.camera_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.camera_label = QLabel()
-        self.camera_label.setAlignment(Qt.AlignCenter)
-        self.camera_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        # you already defined self.camera_label somewhere above, just re‐use it:
         self.camera_label.setMinimumSize(480, 360)
-        self.camera_label.setStyleSheet("""
-            QLabel {
-                background: black;
-                border: 3px solid transparent;
-            }
-        """)
-        
-        self.camera_layout.addWidget(self.camera_label)
-        self.camera_panel.setLayout(self.camera_layout)
-        self.main_layout.addWidget(self.camera_panel, 0, Qt.AlignCenter)
+        self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        cam_layout = QVBoxLayout(self.camera_panel)
+        cam_layout.setContentsMargins(0, 0, 0, 0)
+        cam_layout.addWidget(self.camera_label)
+        self.layout.addWidget(self.camera_panel)
         
         # Control Panel - Fixed width
         self.control_panel = QFrame()
         self.control_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.control_panel.setFixedWidth(400)  # Fixed width to prevent stretching
-        self.control_layout = QVBoxLayout()
+        self.control_layout = QVBoxLayout(self.control_panel)
         self.control_layout.setContentsMargins(0, 0, 0, 0)
         self.control_layout.setSpacing(10)
         
