@@ -59,9 +59,29 @@
     process.exit(1);
   });
 
+  // MIGRATION SCRIPT
+  mongoose.connection.once('open', async () => {
+    try {
+      const users = await User.find({ 'email.isActive': { $exists: true } });
+      if (users.length > 0) {
+        console.log('Migrating user isActive fields...');
+        await Promise.all(users.map(async user => {
+          if (user.email.isActive !== undefined) {
+            user.isActive = user.email.isActive;
+            delete user.email.isActive;
+            await user.save();
+          }
+        }));
+        console.log('Migration complete');
+      }
+    } catch (err) {
+      console.error('Migration error:', err);
+    }
+  });
+
   const userSchema = new mongoose.Schema({
+    isActive: { type: Boolean, default: true },
     email: { 
-      isActive: { type: Boolean, default: true },
       type: String, 
       required: true, 
       unique: true,
@@ -297,6 +317,15 @@
   // API Routes
 
   // Auth Routes 
+
+  app.post('/api/admin/confirm-password', protect, authorize('admin'), async (req, res) => {
+  const { password } = req.body;
+  const user = await User.findById(req.user.id).select('+password');
+  const match = await user.matchPassword(password);
+  if (!match) return res.status(401).json({ error: 'Incorrect password' });
+  res.json({ success: true });
+});
+
   app.get('/api/auth/me', protect, async (req, res) => {
     try {
       const user = await User.findById(req.user.id).select('-password');
@@ -367,7 +396,10 @@
       if (!user) {
         return res.status(401).json({ success: false, error: 'Invalid credentials' });
       }
-      
+      if (!user.isActive) {
+        return res.status(403).json({ error: 'Your account has been deactivated. Please contact the administrator.' });
+      }
+
       const isMatch = await user.matchPassword(password);
       if (!isMatch) {
         return res.status(401).json({ success: false, error: 'Invalid credentials' });
@@ -581,9 +613,27 @@ app.put('/api/admin/users/:id/reactivate', protect, authorize('admin'), async (r
   }
 });
 
+app.get('/api/admin/users', protect, authorize('admin'), async (req, res) => {
+  try {
+    const users = await User.find({ isActive: true }).select('-password');
+    res.status(200).json({ success: true, data: users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/admin/users/archived', protect, authorize('admin'), async (req, res) => {
   try {
     const users = await User.find({ isActive: false }).select('-password');
+    res.status(200).json({ success: true, data: users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/users/all', protect, authorize('admin'), async (req, res) => {
+  try {
+    const users = await User.find().select('-password');
     res.status(200).json({ success: true, data: users });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
