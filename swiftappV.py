@@ -1209,6 +1209,15 @@ class App(QMainWindow):
         
         self.camera_thread.start_test()
 
+    def update_diameter(self, diameter):
+        """Update the UI with the measured diameter"""
+        self.current_distance = diameter
+        self.inspection_page.diameter_label.setText(f"Wheel Diameter: {diameter:.1f} mm")
+        
+        # Enable save button if we have both test result and measurement
+        if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
+            self.inspection_page.save_btn.setEnabled(True)
+            
     def measure_diameter(self):
         self.inspection_page.diameter_label.setText("Measuring...")
         self.inspection_page.diameter_label.show()
@@ -1220,9 +1229,9 @@ class App(QMainWindow):
 
         try:
             self.serial_thread = SerialReaderThread()
-            self.serial_thread.diameter_measured.connect(self.update_diameter)
+            self.serial_thread.diameter_measured.connect(self.update_diameter)  # Connect to the new method
             self.serial_thread.measurement_complete.connect(self.on_diameter_measurement_complete)
-            self.serial_thread.error_occurred.connect(self.handle_measurement_error)  # Changed to handle_measurement_error
+            self.serial_thread.error_occurred.connect(self.handle_measurement_error)
             self.serial_thread.start()
 
         except Exception as e:
