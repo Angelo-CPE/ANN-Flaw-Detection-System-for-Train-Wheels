@@ -78,55 +78,65 @@ class DistanceSensorThread(QThread):
         self._run_flag = True
         self.port = port
         self.baudrate = baudrate
+        self.max_retries = 3
+        self.retry_delay = 1  # seconds
 
     def run(self):
-        try:
-            with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
-                print(f"Connected to {self.port} at {self.baudrate} baud")
-                
-                ser.reset_input_buffer()
-                ser.reset_output_buffer()
-                
-                time.sleep(2)
-                
-                while ser.in_waiting:
-                    ser.readline()
+        retry_count = 0
+        while retry_count < self.max_retries and self._run_flag:
+            try:
+                with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
+                    print(f"Connected to {self.port} at {self.baudrate} baud")
+                    
+                    ser.reset_input_buffer()
+                    ser.reset_output_buffer()
+                    
+                    time.sleep(2)
+                    
+                    while ser.in_waiting:
+                        ser.readline()
 
-                ser.write(b'R\n')
+                    ser.write(b'R\n')
+                    
+                    start_time = time.time()
+                    while time.time() - start_time < 5 and self._run_flag:
+                        if ser.in_waiting:
+                            line = ser.readline().decode('ascii', errors='ignore').strip()
+                            if line:
+                                print(f"Received from Arduino: {line}")
+                                try:
+                                    distance = int(line)
+                                    if distance > 0:
+                                        self.distance_measured.emit(distance)
+                                        self.measurement_complete.emit()
+                                        return
+                                    elif distance == 0:
+                                        self.error_occurred.emit("No new distance measurement available from Arduino.")
+                                        break
+                                    elif distance == -1:
+                                        self.error_occurred.emit("Arduino: Sensor initialization error.")
+                                        break
+                                    elif distance == -2:
+                                        self.error_occurred.emit("Arduino: Sensor timeout occurred.")
+                                        break
+                                except ValueError:
+                                    print(f"Non-integer data received from Arduino: {line}")
+                                    continue
+                    
+                    self.error_occurred.emit("No valid distance measurement received from Arduino within timeout.")
+                    break
                 
-                start_time = time.time()
-                while time.time() - start_time < 5:
-                    if ser.in_waiting:
-                        line = ser.readline().decode('ascii', errors='ignore').strip()
-                        if line:
-                            print(f"Received from Arduino: {line}")
-                            try:
-                                distance = int(line)
-                                if distance > 0:
-                                    self.distance_measured.emit(distance)
-                                    self.measurement_complete.emit()
-                                    return
-                                elif distance == 0:
-                                    self.error_occurred.emit("No new distance measurement available from Arduino.")
-                                    break
-                                elif distance == -1:
-                                    self.error_occurred.emit("Arduino: Sensor initialization error.")
-                                    break
-                                elif distance == -2:
-                                    self.error_occurred.emit("Arduino: Sensor timeout occurred.")
-                                    break
-                            except ValueError:
-                                print(f"Non-integer data received from Arduino: {line}")
-                                continue
-                
-                self.error_occurred.emit("No valid distance measurement received from Arduino within timeout.")
-                
-        except serial.SerialException as e:
-            self.error_occurred.emit(f"Serial port error: {str(e)}. Make sure Arduino is connected and the correct port is selected.")
-        except Exception as e:
-            self.error_occurred.emit(f"Unexpected error in DistanceSensorThread: {str(e)}")
-        finally:
-            self.measurement_complete.emit()
+            except serial.SerialException as e:
+                retry_count += 1
+                if retry_count < self.max_retries:
+                    print(f"Serial port error (attempt {retry_count}/{self.max_retries}): {str(e)}")
+                    time.sleep(self.retry_delay)
+                else:
+                    self.error_occurred.emit(f"Serial port error: {str(e)}. Make sure Arduino is connected and the correct port is selected.")
+            except Exception as e:
+                self.error_occurred.emit(f"Unexpected error in DistanceSensorThread: {str(e)}")
+                break
+        self.measurement_complete.emit()
 
     def stop(self):
         self._run_flag = False
@@ -309,13 +319,28 @@ class BatteryMonitorThread(QThread):
         super().__init__()
         self._run_flag = True
         self.ina219 = INA219()
+        self.last_voltage = 0
+        self.smoothing_factor = 0.2  # Smoothing factor for exponential moving average
 
     def run(self):
         while self._run_flag:
             try:
                 bus_voltage = self.ina219.getBusVoltage_V()
-                percentage = ((bus_voltage - 7.0) / (8.4 - 7.0)) * 100
+                # Simple exponential smoothing
+                self.last_voltage = (self.smoothing_factor * bus_voltage) + ((1 - self.smoothing_factor) * self.last_voltage)
+                
+                # More accurate battery percentage calculation
+                # Assuming 8.4V is 100% and 6.0V is 0% (adjust these values based on your battery specs)
+                min_voltage = 6.0
+                max_voltage = 8.4
+                
+                # Clamp voltage within range
+                clamped_voltage = max(min_voltage, min(max_voltage, self.last_voltage))
+                
+                # Calculate percentage
+                percentage = ((clamped_voltage - min_voltage) / (max_voltage - min_voltage)) * 100
                 percentage = max(0, min(100, int(percentage)))
+                
                 self.battery_percentage_signal.emit(percentage)
             except Exception as e:
                 print(f"Error reading battery data: {e}")
@@ -341,24 +366,23 @@ class App(QMainWindow):
         self.test_status = None
         self.test_recommendation = None
         
+        # Main widget and layout
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.central_widget.setStyleSheet("background: white;")
         
-        self.main_layout = QVBoxLayout()
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.setSpacing(0)
+        # Main horizontal layout
+        self.main_layout = QHBoxLayout()
+        self.main_layout.setContentsMargins(10, 10, 10, 10)
+        self.main_layout.setSpacing(10)
         self.central_widget.setLayout(self.main_layout)
         
-        self.content_layout = QVBoxLayout()
-        self.content_layout.setContentsMargins(0, 0, 0, 0)
-        self.content_layout.setSpacing(0)
-        
-        # Camera Panel
+        # Left side - Camera Panel
         self.camera_panel = QFrame()
         self.camera_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.camera_layout = QVBoxLayout()
         self.camera_layout.setContentsMargins(0, 0, 0, 0)
+        self.camera_layout.setSpacing(10)
         
         self.camera_label = QLabel()
         self.camera_label.setAlignment(Qt.AlignCenter)
@@ -367,24 +391,21 @@ class App(QMainWindow):
         self.camera_label.setStyleSheet("QLabel { background: black; border: none; }")
         
         self.camera_layout.addWidget(self.camera_label)
-        self.camera_panel.setFixedHeight(360)
-        self.camera_panel.setFixedWidth(480)
-        self.camera_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.camera_layout.setAlignment(Qt.AlignCenter)
         self.camera_panel.setLayout(self.camera_layout)
         
-        # Control Panel
+        # Right side - Control Panel
         self.control_panel = QFrame()
         self.control_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.control_layout = QVBoxLayout()
         self.control_layout.setContentsMargins(0, 0, 0, 0)
-        self.control_layout.setSpacing(0)
+        self.control_layout.setSpacing(10)
         
         # Status Panel
         self.status_panel = QFrame()
         self.status_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.status_layout = QVBoxLayout()
         self.status_layout.setContentsMargins(5, 5, 5, 5)
+        self.status_layout.setSpacing(10)
         
         # Logo
         self.logo_space = QLabel()
@@ -394,7 +415,7 @@ class App(QMainWindow):
         
         logo_pixmap = QPixmap('logo.png')
         if not logo_pixmap.isNull():
-            self.logo_space.setPixmap(logo_pixmap.scaledToHeight(150, Qt.SmoothTransformation))
+            self.logo_space.setPixmap(logo_pixmap.scaledToHeight(80, Qt.SmoothTransformation))
         
         # Number controls
         self.number_controls = QFrame()
@@ -776,13 +797,11 @@ class App(QMainWindow):
         
         self.control_layout.addWidget(self.status_panel)
         self.control_layout.addWidget(self.button_panel)
-        self.control_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.control_panel.setLayout(self.control_layout)
         
-        self.content_layout.addWidget(self.camera_panel)
-        self.content_layout.addWidget(self.control_panel)
-        
-        self.main_layout.addLayout(self.content_layout)
+        # Add panels to main layout with proper stretch factors
+        self.main_layout.addWidget(self.camera_panel, 60)  # 60% width
+        self.main_layout.addWidget(self.control_panel, 40)  # 40% width
         
         self.setup_animations()
         self.setup_camera_thread()
@@ -865,8 +884,12 @@ class App(QMainWindow):
     def on_distance_measured(self, distance):
         self.current_distance = distance
         if self.current_distance > 0:
-            diameter_calculated = 920 + (680 - self.current_distance) * 0.5
-            self.diameter_label.setText(f"Wheel Diameter: {diameter_calculated:.2f} mm")
+            # More accurate diameter calculation based on sensor geometry
+            # Assuming sensor is mounted at a known distance from wheel center
+            # This is just an example - adjust the formula based on your actual setup
+            sensor_to_wheel_center = 500  # mm (adjust this based on your mounting)
+            diameter = 2 * (sensor_to_wheel_center - self.current_distance)
+            self.diameter_label.setText(f"Wheel Diameter: {diameter:.1f} mm")
             self.diameter_label.show()
         else:
             self.diameter_label.setText("Wheel Diameter: N/A")
@@ -881,9 +904,13 @@ class App(QMainWindow):
         self.recommendation_indicator.setText(message)
         self.enable_buttons(True)
         self.diameter_label.hide()
+        QMessageBox.warning(self, "Measurement Error", message)
 
     def update_image(self, qt_image):
-        self.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(self.camera_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
+            self.camera_label.width(), self.camera_label.height(),
+            Qt.KeepAspectRatio, Qt.SmoothTransformation
+        ))
 
     def update_status(self, status, recommendation):
         self.status_indicator.setText(status)
@@ -981,11 +1008,21 @@ if __name__ == '__main__':
         sys.exit(1)
 
     app = QApplication(sys.argv)
-    QFontDatabase.addApplicationFont("Montserrat-Black.ttf")
-    QFontDatabase.addApplicationFont("Montserrat-Bold.ttf")
-    QFontDatabase.addApplicationFont("Montserrat-ExtraBold.ttf")
-    QFontDatabase.addApplicationFont("Montserrat-SemiBold.ttf")
-    QFontDatabase.addApplicationFont("Montserrat-Regular.ttf")
+    
+    # Load custom fonts
+    font_paths = [
+        "Montserrat-Black.ttf",
+        "Montserrat-Bold.ttf",
+        "Montserrat-ExtraBold.ttf",
+        "Montserrat-SemiBold.ttf",
+        "Montserrat-Regular.ttf"
+    ]
+    
+    for font_path in font_paths:
+        if os.path.exists(font_path):
+            QFontDatabase.addApplicationFont(font_path)
+        else:
+            print(f"Font file not found: {font_path}")
 
     ex = App()
     ex.show()
