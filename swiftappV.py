@@ -294,7 +294,7 @@ class HomePage(QWidget):
         self.logo_label.setAlignment(Qt.AlignCenter)
         logo_pixmap = QPixmap('logo.png')
         if not logo_pixmap.isNull():
-            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(200, Qt.SmoothTransformation))
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(100, Qt.SmoothTransformation))
         self.layout.addWidget(self.logo_label)
         
         # Buttons
@@ -390,7 +390,7 @@ class SelectionPage(QWidget):
         self.logo_label.setAlignment(Qt.AlignCenter)
         logo_pixmap = QPixmap('logo.png')
         if not logo_pixmap.isNull():
-            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(120, Qt.SmoothTransformation))  # Reduced from 180 to 120
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(60, Qt.SmoothTransformation))
         self.layout.addWidget(self.logo_label)
         self.layout.addSpacing(5)  # Reduced spacing from 10 to 5 after logo
         
