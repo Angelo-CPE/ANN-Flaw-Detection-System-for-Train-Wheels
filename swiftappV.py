@@ -365,107 +365,157 @@ class SelectionPage(QWidget):
         self.layout.setContentsMargins(20, 10, 20, 20)   # less top padding
         self.layout.setSpacing(10)   
         
-        # ─── Header: Back + Logo ─────────────────────
-        hdr = QHBoxLayout()
-        back = QPushButton("← Back")
-        back.setFixedHeight(36)
-        back.setStyleSheet("""
+        # Back Button (unchanged)
+        self.back_button = QPushButton("← Back")
+        self.back_button.setStyleSheet("""
             QPushButton {
-                background: #F0F0F0;
+                background: #f0f0f0;
                 color: #333;
-                border: 1px solid #DDD;
-                border-radius: 6px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                padding: 8px 15px;
+                font-family: 'Montserrat SemiBold';
                 font-size: 14px;
-                padding: 4px 12px;
+                min-width: 80px;
             }
             QPushButton:hover {
-                background: #E60000;
-                color: #FFF;
-                border-color: #E60000;
+                background: #e60000;
+                color: white;
+                border-color: #e60000;
+            }
+            QPushButton:pressed {
+                background: #b30000;
             }
         """)
-        back.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
-        hdr.addWidget(back, alignment=Qt.AlignLeft)
-        hdr.addStretch(1)
-        logo = QLabel()
-        logo.setPixmap(
-            QPixmap("logo.png")
-            .scaledToHeight(48, Qt.SmoothTransformation)
-        )
-        hdr.addWidget(logo, alignment=Qt.AlignRight)
-        self.layout.addLayout(hdr)
-        self.layout.addSpacing(5)  # small gap before title
-
-        # ─── Title ────────────────────────────────────
-        title = QLabel("SELECT INSPECTION DETAILS", alignment=Qt.AlignCenter)
-        title.setStyleSheet("""
+        self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
+        self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
+        
+        # Logo - with reduced size and spacing
+        self.logo_label = QLabel()
+        self.logo_label.setAlignment(Qt.AlignCenter)
+        logo_pixmap = QPixmap('logo.png')
+        if not logo_pixmap.isNull():
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(60, Qt.SmoothTransformation))
+        self.layout.addWidget(self.logo_label)
+        self.layout.addSpacing(5)  # Reduced spacing from 10 to 5 after logo
+        
+        # Main content container
+        content_frame = QFrame()
+        content_frame.setStyleSheet("QFrame { background: transparent; }")
+        content_layout = QVBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(15)
+        
+        # Section title
+        section_title = QLabel("SELECT INSPECTION DETAILS")
+        section_title.setAlignment(Qt.AlignCenter)
+        section_title.setStyleSheet("""
             QLabel {
                 font-family: 'Montserrat Bold';
                 font-size: 18px;
                 color: #333;
-                padding-bottom: 4px;
-                border-bottom: 2px solid #E60000;
+                padding-bottom: 5px;
+                border-bottom: 2px solid #e60000;
             }
         """)
-        self.layout.addWidget(title)
-        self.layout.addSpacing(8)  # small gap after title
-
-        # ─── Sliders Container ────────────────────────
-        frame = QFrame()
-        frame.setStyleSheet("background: #FAF7F2; border-radius: 8px;")
-        fl = QVBoxLayout(frame)
-        fl.setContentsMargins(12, 12, 12, 12)
-        fl.setSpacing(12)
-
-        for text, maxv in [
-            ("Train Number", 20),
-            ("Compartment Number", 8),
-            ("Wheel Number", 8)
-        ]:
-            vb = QVBoxLayout()
-            vb.setSpacing(6)
-
-            lbl = QLabel(text)
-            lbl.setStyleSheet(
-                "font-size:16px; color:#555;"
-                "font-family:'Montserrat SemiBold';"
-            )
-            vb.addWidget(lbl)
-
-            s = QSlider(Qt.Horizontal)
-            s.setRange(1, maxv)
-            s.setValue(1)
-            s.setFixedHeight(24)
-            s.setStyleSheet("""
-                QSlider::groove:horizontal {
-                    height:8px;
-                    background:#E0E0E0;
-                    border-radius:4px;
-                }
-                QSlider::handle:horizontal {
-                    width:24px;
-                    height:24px;
-                    background:#E60000;
-                    border-radius:12px;
-                    margin:-8px 0;
-                }
-            """)
-            vb.addWidget(s)
-
-            val = QLabel("1", alignment=Qt.AlignCenter)
-            val.setStyleSheet(
-                "font-size:20px; color:#E60000;"
-                "font-family:'Montserrat Bold';"
-            )
-            vb.addWidget(val)
-
-            # update the label when slider moves
-            s.valueChanged.connect(lambda v, l=val: l.setText(str(v)))
-
-            fl.addLayout(vb)
-
-        self.layout.addWidget(frame)
-        self.layout.addSpacing(10)  # gap before button
+        content_layout.addWidget(section_title)
+        
+        # Train Selection
+        self.train_layout = QVBoxLayout()
+        self.train_layout.setSpacing(5)
+        self.train_label = QLabel("Train Number")
+        self.train_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat SemiBold';
+                font-size: 16px;
+                color: #555;
+            }
+        """)
+        self.train_layout.addWidget(self.train_label)
+        
+        self.train_slider = QSlider(Qt.Horizontal)
+        self.train_slider.setRange(1, 20)
+        self.train_slider.setValue(1)
+        self.train_slider.setStyleSheet("""
+            QSlider {
+                height: 40px;
+            }
+            QSlider::groove:horizontal {
+                height: 8px;
+                background: #e0e0e0;
+                border-radius: 4px;
+            }
+            QSlider::handle:horizontal {
+                width: 24px;
+                height: 24px;
+                margin: -8px 0;
+                background: #e60000;
+                border-radius: 12px;
+            }
+        """)
+        self.train_layout.addWidget(self.train_slider)
+        
+        self.train_value = QLabel("1")
+        self.train_value.setAlignment(Qt.AlignCenter)
+        self.train_value.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat Bold';
+                font-size: 20px;
+                color: #e60000;
+            }
+        """)
+        self.train_layout.addWidget(self.train_value)
+        content_layout.addLayout(self.train_layout)
+        
+        # Compartment Selection
+        self.compartment_layout = QVBoxLayout()
+        self.compartment_layout.setSpacing(5)
+        self.compartment_label = QLabel("Compartment Number")
+        self.compartment_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat SemiBold';
+                font-size: 16px;
+                color: #555;
+            }
+        """)
+        self.compartment_layout.addWidget(self.compartment_label)
+        
+        self.compartment_slider = QSlider(Qt.Horizontal)
+        self.compartment_slider.setRange(1, 8)
+        self.compartment_slider.setValue(1)
+        self.compartment_slider.setStyleSheet(self.train_slider.styleSheet())
+        self.compartment_layout.addWidget(self.compartment_slider)
+        
+        self.compartment_value = QLabel("1")
+        self.compartment_value.setAlignment(Qt.AlignCenter)
+        self.compartment_value.setStyleSheet(self.train_value.styleSheet())
+        self.compartment_layout.addWidget(self.compartment_value)
+        content_layout.addLayout(self.compartment_layout)
+        
+        # Wheel Selection
+        self.wheel_layout = QVBoxLayout()
+        self.wheel_layout.setSpacing(5)
+        self.wheel_label = QLabel("Wheel Number")
+        self.wheel_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat SemiBold';
+                font-size: 16px;
+                color: #555;
+            }
+        """)
+        self.wheel_layout.addWidget(self.wheel_label)
+        
+        self.wheel_slider = QSlider(Qt.Horizontal)
+        self.wheel_slider.setRange(1, 8)
+        self.wheel_slider.setValue(1)
+        self.wheel_slider.setStyleSheet(self.train_slider.styleSheet())
+        self.wheel_layout.addWidget(self.wheel_slider)
+        
+        self.wheel_value = QLabel("1")
+        self.wheel_value.setAlignment(Qt.AlignCenter)
+        self.wheel_value.setStyleSheet(self.train_value.styleSheet())
+        self.wheel_layout.addWidget(self.wheel_value)
+        content_layout.addLayout(self.wheel_layout)
         
         # Start Button
         self.start_button = QPushButton("START INSPECTION")
@@ -489,10 +539,10 @@ class SelectionPage(QWidget):
             }
         """)
         self.start_button.clicked.connect(self.start_inspection)
-        self.content_layout.addWidget(self.start_button)
+        content_layout.addWidget(self.start_button)
         
-        self.content_frame.setLayout(self.content_layout)
-        self.layout.addWidget(self.content_frame, stretch=1)
+        content_frame.setLayout(content_layout)
+        self.layout.addWidget(content_frame, stretch=1)
         self.setLayout(self.layout)
         
         # Connect signals
