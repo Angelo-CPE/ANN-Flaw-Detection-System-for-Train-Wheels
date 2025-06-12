@@ -293,37 +293,20 @@ class App(QMainWindow):
         self.test_status = None
         self.test_recommendation = None
         
-        # Main container widget that will hold our rotated content
-        self.container = QWidget()
-        self.setCentralWidget(self.container)
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.central_widget.setStyleSheet("background: white;")
         
-        # This layout will hold our rotated content
-        self.main_layout = QHBoxLayout()
+        self.main_layout = QVBoxLayout()
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
-        self.container.setLayout(self.main_layout)
+        self.central_widget.setLayout(self.main_layout)
         
-        # Create a widget that will contain all our UI elements in portrait orientation
-        self.portrait_widget = QWidget()
-        self.portrait_widget.setStyleSheet("background: white;")
-        
-        # This is the layout that will be rotated to portrait
-        self.portrait_layout = QVBoxLayout()
-        self.portrait_layout.setContentsMargins(0, 0, 0, 0)
-        self.portrait_layout.setSpacing(0)
-        self.portrait_widget.setLayout(self.portrait_layout)
-        
-        # Add the portrait widget to the main layout with centering and rotation
-        self.main_layout.addStretch()
-        self.main_layout.addWidget(self.portrait_widget)
-        self.main_layout.addStretch()
-        
-        # Now build the UI as before, but inside the portrait_layout
         self.content_layout = QHBoxLayout()
         self.content_layout.setContentsMargins(0, 0, 0, 0)
         self.content_layout.setSpacing(0)
         
-        # Camera Panel (same as before)
+        # Camera Panel
         self.camera_panel = QFrame()
         self.camera_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.camera_layout = QVBoxLayout()
@@ -342,14 +325,14 @@ class App(QMainWindow):
         self.camera_layout.setAlignment(Qt.AlignCenter)
         self.camera_panel.setLayout(self.camera_layout)
         
-        # Control Panel (same as before)
+        # Control Panel
         self.control_panel = QFrame()
         self.control_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.control_layout = QVBoxLayout()
         self.control_layout.setContentsMargins(0, 0, 0, 0)
         self.control_layout.setSpacing(0)
         
-        # Status Panel (same as before)
+        # Status Panel
         self.status_panel = QFrame()
         self.status_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.status_layout = QVBoxLayout()
@@ -740,15 +723,6 @@ class App(QMainWindow):
         
         self.main_layout.addLayout(self.content_layout)
         
-        # Add the content layout to the portrait layout
-        self.portrait_layout.addLayout(self.content_layout)
-        
-        # Now apply a rotation transformation to the portrait widget
-        self.portrait_widget.setMinimumSize(800, 480)  # Adjust as needed
-        transform = QTransform()
-        transform.rotate(90)
-        self.portrait_widget.setTransform(transform)
-
         self.setup_animations()
         self.setup_camera_thread()
         self.connect_signals()
