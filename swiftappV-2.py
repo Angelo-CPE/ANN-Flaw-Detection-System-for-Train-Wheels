@@ -372,31 +372,17 @@ class App(QMainWindow):
         self.central_widget.setStyleSheet("background: white;")
         
         # Main vertical layout
-        self.main_layout = QVBoxLayout()
+        self.main_layout = QVBoxLayout(self.central_widget)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
-        self.central_widget.setLayout(self.main_layout)
         
         # Camera Panel (top section)
         self.camera_panel = QFrame()
-        self.camera_panel.setStyleSheet("QFrame { background: white; border: none; }")
-        self.camera_layout = QVBoxLayout()
+        self.camera_panel.setStyleSheet("QFrame { background: black; border: none; }")
+        self.camera_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.camera_layout = QVBoxLayout(self.camera_panel)
         self.camera_layout.setContentsMargins(0, 0, 0, 0)
         self.camera_layout.setSpacing(0)
-        
-        # Camera title - moved after camera_layout is defined
-        self.camera_title = QLabel("WHEEL INSPECTION CAMERA")
-        self.camera_title.setAlignment(Qt.AlignCenter)
-        self.camera_title.setStyleSheet("""
-            QLabel {
-                color: #333;
-                font-family: 'Montserrat Bold';
-                font-size: 18px;
-                padding: 10px 0;
-                background: #f8f8f8;
-                border-bottom: 1px solid #ddd;
-            }
-        """)
         
         self.camera_label = QLabel()
         self.camera_label.setAlignment(Qt.AlignCenter)
@@ -407,37 +393,38 @@ class App(QMainWindow):
         # Add widgets to camera layout
         self.camera_layout.addWidget(self.camera_title)
         self.camera_layout.addWidget(self.camera_label)
-        self.camera_panel.setLayout(self.camera_layout)
         
-        # Control Panel (now at bottom)
+        # Control Panel (bottom section)
         self.control_panel = QFrame()
         self.control_panel.setStyleSheet("""
-            QFrame { 
-                background: white; 
-                border: none;
-                border-top: 1px solid #eee;
+            QFrame {
+                background-color: #FFFFFF;
+                border-top: 2px solid #ddd;
             }
         """)
-        self.control_layout = QVBoxLayout()
+        self.control_panel.setFixedHeight(400)  # Fixed height for control panel
+        self.control_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        
+        self.control_layout = QVBoxLayout(self.control_panel)
         self.control_layout.setContentsMargins(20, 10, 20, 10)
         self.control_layout.setSpacing(15)
         
         # Status Panel
         self.status_panel = QFrame()
         self.status_panel.setStyleSheet("QFrame { background: white; border: none; }")
-        self.status_layout = QVBoxLayout()
+        self.status_layout = QVBoxLayout(self.status_panel)
         self.status_layout.setContentsMargins(5, 5, 5, 5)
         self.status_layout.setSpacing(10)
         
         # Logo
         self.logo_space = QLabel()
         self.logo_space.setAlignment(Qt.AlignCenter)
-        self.logo_space.setFixedHeight(80)
+        self.logo_space.setFixedHeight(60)
         self.logo_space.setStyleSheet("background: transparent;")
         
         logo_pixmap = QPixmap('logo.png')
         if not logo_pixmap.isNull():
-            self.logo_space.setPixmap(logo_pixmap.scaledToHeight(80, Qt.SmoothTransformation))
+            self.logo_space.setPixmap(logo_pixmap.scaledToHeight(60, Qt.SmoothTransformation))
         
         # Number controls
         self.number_controls = QFrame()
@@ -450,7 +437,7 @@ class App(QMainWindow):
         self.train_label = QLabel("Train")
         self.train_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat Bold';
+                font-family: 'Montserrat SemiBold';
                 font-size: 15px;
                 color: #333;
                 padding-right: 6px;
@@ -506,7 +493,7 @@ class App(QMainWindow):
         self.compartment_label = QLabel("Compartment")
         self.compartment_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat Bold';
+                font-family: 'Montserrat SemiBold';
                 font-size: 15px;
                 color: #333;
                 padding-right: 6px;
@@ -822,8 +809,8 @@ class App(QMainWindow):
         self.control_panel.setLayout(self.control_layout)
         
         # Add panels to main layout with proper stretch factors
-        self.main_layout.addWidget(self.camera_panel, 70)  # 70% HEIGHT
-        self.main_layout.addWidget(self.control_panel, 30)  # 30% HEIGHT
+        self.main_layout.addWidget(self.camera_panel)
+        self.main_layout.addWidget(self.control_panel)  
         
         self.setup_animations()
         self.setup_camera_thread()
@@ -929,10 +916,16 @@ class App(QMainWindow):
         QMessageBox.warning(self, "Measurement Error", message)
 
     def update_image(self, qt_image):
-        self.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
-            self.camera_label.width(), self.camera_label.height(),
-            Qt.KeepAspectRatio, Qt.SmoothTransformation
-        ))
+        """Maintain aspect ratio while scaling the camera image"""
+        pixmap = QPixmap.fromImage(qt_image)
+        pixmap = pixmap.scaled(
+            self.camera_label.width(), 
+            self.camera_label.height(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        )
+        self.camera_label.setPixmap(pixmap)
+        self.camera_label.setAlignment(Qt.AlignCenter)
 
     def update_status(self, status, recommendation):
         self.status_indicator.setText(status)
@@ -1036,6 +1029,7 @@ if __name__ == '__main__':
         "Montserrat-Black.ttf",
         "Montserrat-Bold.ttf",
         "Montserrat-ExtraBold.ttf",
+        "Montserrat-SemiBold.ttf",
         "Montserrat-Regular.ttf"
     ]
     
