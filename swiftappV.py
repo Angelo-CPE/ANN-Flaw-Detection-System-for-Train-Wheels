@@ -397,14 +397,14 @@ class SelectionPage(QWidget):
         if not logo_pixmap.isNull():
             self.logo_label.setPixmap(logo_pixmap.scaledToHeight(60, Qt.SmoothTransformation))
         self.layout.addWidget(self.logo_label)
-        self.layout.addSpacing(2)  # Reduced spacing from 10 to 5 after logo
+        self.layout.addSpacing(5)  # Reduced spacing from 10 to 5 after logo
         
         # Main content container
         content_frame = QFrame()
         content_frame.setStyleSheet("QFrame { background: transparent; }")
         content_layout = QVBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(15)
+        content_layout.setSpacing(10)
         
         # Section title
         section_title = QLabel("SELECT INSPECTION DETAILS")
