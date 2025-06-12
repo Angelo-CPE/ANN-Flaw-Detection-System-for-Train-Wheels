@@ -133,7 +133,7 @@ class SerialReaderThread(QThread):
     error_occurred = pyqtSignal(str)
 
     # Constants from Arduino code
-    CHORD_L = 0.2500  # metres (exact pad spacing)
+    CHORD_L = 0.250  # metres (exact pad spacing)
     LEVER_GAIN = 3.00  # 3× mechanical amplifier
     LIFT_OFF_MM = 29.0  # sensor→lever gap when off-wheel
     
@@ -189,15 +189,35 @@ class SerialReaderThread(QThread):
 
     def calculate_diameter(self, g_raw):
         """Calculate wheel diameter from raw sensor reading"""
-        # Linearise (mm)
+        # Linearise (mm) - convert raw reading to linear distance
         g_lin = self.M_SLOPE * g_raw + self.B_OFFS
         
-        # Undo lift-off & lever, convert to sagitta (metres)
-        d_true_m = (g_lin - self.LIFT_OFF_MM) / (self.LEVER_GAIN * 1000.0)
+        # Debug print to check intermediate values
+        print(f"Raw: {g_raw:.1f} mm, Linearized: {g_lin:.1f} mm")
         
-        # Circle geometry
+        # Calculate true sagitta (d) in meters:
+        # Subtract lift-off distance and account for lever gain
+        # Convert from mm to meters (/1000)
+        d_true_m = (self.LIFT_OFF_MM - g_lin) / (self.LEVER_GAIN * 1000.0)
+        
+        # Debug print
+        print(f"True sagitta: {d_true_m*1000:.3f} mm")
+        
+        # Circle geometry calculation:
+        # R = (L²)/(8d) + d/2
+        # Where L is chord length (0.25m), d is sagitta
         R = (self.CHORD_L ** 2) / (8.0 * d_true_m) + d_true_m / 2.0
-        return R * 2000.0  # 2×R and metres→mm
+        
+        # Debug print
+        print(f"Calculated radius: {R:.3f} m")
+        
+        # Convert radius to diameter and meters to mm
+        diameter = R * 2000.0  # 2×R and metres→mm
+        
+        # Debug print
+        print(f"Final diameter: {diameter:.1f} mm")
+        
+        return diameter
 
     def run(self):
         try:
