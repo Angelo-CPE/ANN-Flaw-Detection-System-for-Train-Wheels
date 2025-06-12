@@ -373,6 +373,61 @@ app.post('/api/auth/login', [
   }
 });
 
+app.post('/api/auth/forgotpassword', async (req, res) => {
+  const { email } = req.body;
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: 'No user with that email' });
+    }
+
+    const resetToken = user.getResetPasswordToken();
+    await user.save();
+
+    const resetUrl = `https://ann-flaw-detection-system-for-train.onrender.com/resetpassword/${resetToken}`;
+    const message = `You requested a password reset. Use the link to reset your password:\n\n${resetUrl}\n\nIf you did not request this, please ignore this email.`;
+
+    await transporter.sendMail({
+      to: user.email,
+      subject: 'Password Reset Request',
+      text: message
+    });
+
+    res.json({ message: 'Reset link sent to email' });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: 'Email could not be sent' });
+  }
+});
+
+app.put('/api/auth/resetpassword/:token', async (req, res) => {
+  const resetPasswordToken = crypto
+    .createHash('sha256')
+    .update(req.params.token)
+    .digest('hex');
+
+  try {
+    const user = await User.findOne({
+      resetPasswordToken,
+      resetPasswordExpire: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired token' });
+    }
+
+    user.password = req.body.password;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+
+    await user.save();
+
+    res.json({ message: 'Password reset successful' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
 
 // Report Routes (protected)
 app.get('/api/reports', protect, async (req, res) => {
