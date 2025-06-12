@@ -786,8 +786,8 @@ class CalibrationPage(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.setup_ui()
-        self.setup_serial()
         self.calibration_values = {"700mm": None, "600mm": None}
+        self.current_reading = None
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
@@ -883,7 +883,7 @@ class CalibrationPage(QWidget):
         layout.addWidget(title_label, alignment=Qt.AlignCenter)
         
         # Sensor Reading
-        reading_label = QLabel("Calibrate Distance: -")
+        reading_label = QLabel("Distance: -")
         reading_label.setStyleSheet("""
             QLabel {
                 font-family: 'Montserrat SemiBold';
@@ -912,71 +912,78 @@ class CalibrationPage(QWidget):
             QPushButton:pressed {
                 background-color: #004488;
             }
+            QPushButton:disabled {
+                background-color: #888;
+                color: #ccc;
+            }
         """)
         
         # Store references to update later
         if "700" in title:
             self.calib_700_reading = reading_label
             self.calib_700_button = calib_button
-            calib_button.clicked.connect(lambda: self.calibrate("700mm"))
+            calib_button.clicked.connect(lambda: self.start_measurement("700mm"))
         else:
             self.calib_600_reading = reading_label
             self.calib_600_button = calib_button
-            calib_button.clicked.connect(lambda: self.calibrate("600mm"))
+            calib_button.clicked.connect(lambda: self.start_measurement("600mm"))
             
         layout.addWidget(calib_button)
         
         group.setLayout(layout)
         return group
 
-    def setup_serial(self):
-        self.serial_thread = None
+    def start_measurement(self, wheel_type):
+        # Disable both buttons during measurement
+        self.calib_700_button.setEnabled(False)
+        self.calib_600_button.setEnabled(False)
+        
+        # Clear previous readings
+        if wheel_type == "700mm":
+            self.calib_700_reading.setText("Measuring...")
+        else:
+            self.calib_600_reading.setText("Measuring...")
+        
         try:
             self.serial_thread = SerialReaderThread()
-            self.serial_thread.distance_measured.connect(self.update_calibration_readings)
+            self.serial_thread.distance_measured.connect(lambda dist: self.update_reading(wheel_type, dist))
+            self.serial_thread.measurement_complete.connect(lambda: self.on_measurement_complete(wheel_type))
             self.serial_thread.error_occurred.connect(self.handle_serial_error)
             self.serial_thread.start()
-        except Exception as e:
-            self.status_label.setText(f"Serial Error: {str(e)}")
 
-    def update_calibration_readings(self, distance):
-        # Update both calibration sections with live readings
-        self.calib_700_reading.setText(f"Calibrate Distance: {distance} mm")
-        self.calib_600_reading.setText(f"Calibrate Distance: {distance} mm")
-
-    def calibrate(self, wheel_type):
-        try:
-            if self.serial_thread and self.serial_thread.isRunning():
-                # Get the latest reading (you might want to average multiple readings)
-                # For simplicity, we'll use the last displayed value
-                reading_text = self.calib_700_reading.text() if wheel_type == "700mm" else self.calib_600_reading.text()
-                distance = int(reading_text.split(":")[1].strip().split(" ")[0])
-                
-                self.calibration_values[wheel_type] = distance
-                self.status_label.setText(f"{wheel_type} calibrated at {distance} mm")
-                
-                # Save calibration values to file or database
-                self.save_calibration_values()
-            else:
-                self.status_label.setText("Error: Sensor not connected")
         except Exception as e:
-            self.status_label.setText(f"Calibration error: {str(e)}")
+            print(f"Serial connection error: {e}")
+            self.handle_serial_error(f"Serial error: {str(e)}")
+
+    def update_reading(self, wheel_type, distance):
+        self.current_reading = distance
+        if wheel_type == "700mm":
+            self.calib_700_reading.setText(f"Distance: {distance} mm")
+        else:
+            self.calib_600_reading.setText(f"Distance: {distance} mm")
+
+    def on_measurement_complete(self, wheel_type):
+        if self.current_reading is not None:
+            self.calibration_values[wheel_type] = self.current_reading
+            self.status_label.setText(f"{wheel_type} calibrated at {self.current_reading} mm")
+            self.save_calibration_values()
+        
+        # Re-enable buttons
+        self.calib_700_button.setEnabled(True)
+        self.calib_600_button.setEnabled(True)
+
+    def handle_serial_error(self, error_msg):
+        self.status_label.setText(f"Error: {error_msg}")
+        # Re-enable buttons on error
+        self.calib_700_button.setEnabled(True)
+        self.calib_600_button.setEnabled(True)
 
     def save_calibration_values(self):
         # Here you would save to a file or database
-        # For now we'll just print them
         print("Calibration values:", self.calibration_values)
-        # Example: Save to a file
         with open("calibration_values.txt", "w") as f:
             f.write(f"700mm: {self.calibration_values['700mm']}\n")
             f.write(f"600mm: {self.calibration_values['600mm']}\n")
-
-    def handle_serial_error(self, error_msg):
-        self.status_label.setText(f"Sensor Error: {error_msg}")
-
-    def closeEvent(self):
-        if self.serial_thread:
-            self.serial_thread.stop()
 
 class App(QMainWindow):
     def __init__(self):
