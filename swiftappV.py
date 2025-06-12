@@ -297,19 +297,6 @@ class HomePage(QWidget):
             self.logo_label.setPixmap(logo_pixmap.scaledToHeight(200, Qt.SmoothTransformation))
         self.layout.addWidget(self.logo_label)
         
-        # Title
-        self.title_label = QLabel("Smart Wheel Inspection System for Train")
-        self.title_label.setAlignment(Qt.AlignCenter)
-        self.title_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat Bold';
-                font-size: 28px;
-                color: #333;
-                padding: 10px 0;
-            }
-        """)
-        self.layout.addWidget(self.title_label)
-        
         # Buttons
         self.button_layout = QVBoxLayout()
         self.button_layout.setSpacing(20)
@@ -370,12 +357,12 @@ class SelectionPage(QWidget):
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(30, 30, 30, 30)
-        self.layout.setSpacing(20)
+        self.layout.setContentsMargins(30, 20, 30, 30)  # Reduced top margin
+        self.layout.setSpacing(15)  # Reduced spacing
         
         # Back Button
         self.back_button = QPushButton("← Back")
-        self.back_button.setStyleSheet( """
+        self.back_button.setStyleSheet("""
             QPushButton {
                 background: #f0f0f0;
                 color: #333;
@@ -396,23 +383,45 @@ class SelectionPage(QWidget):
             }
         """)
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
-        self.layout.addWidget(self.back_button)
+        self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
-        # Logo
+        # Logo - with reduced bottom margin
         self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignCenter)
         logo_pixmap = QPixmap('logo.png')
         if not logo_pixmap.isNull():
-            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(200, Qt.SmoothTransformation))
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(180, Qt.SmoothTransformation))  # Slightly smaller
         self.layout.addWidget(self.logo_label)
+        self.layout.addSpacing(10)  # Reduced spacing after logo
         
-        # Train Selection - Modified slider handle size
+        # Main content container
+        content_frame = QFrame()
+        content_frame.setStyleSheet("QFrame { background: transparent; }")
+        content_layout = QVBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(15)
+        
+        # Section title
+        section_title = QLabel("SELECT INSPECTION DETAILS")
+        section_title.setAlignment(Qt.AlignCenter)
+        section_title.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat Bold';
+                font-size: 18px;
+                color: #333;
+                padding-bottom: 5px;
+                border-bottom: 2px solid #e60000;
+            }
+        """)
+        content_layout.addWidget(section_title)
+        
+        # Train Selection
         self.train_layout = QVBoxLayout()
         self.train_layout.setSpacing(5)
-        self.train_label = QLabel("Select Train Number")
+        self.train_label = QLabel("Train Number")
         self.train_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat Regular';
+                font-family: 'Montserrat SemiBold';
                 font-size: 16px;
                 color: #555;
             }
@@ -424,19 +433,19 @@ class SelectionPage(QWidget):
         self.train_slider.setValue(1)
         self.train_slider.setStyleSheet("""
             QSlider {
-                height: 50px;  /* Increased height */
+                height: 40px;
             }
             QSlider::groove:horizontal {
-                height: 10px;  /* Increased groove height */
-                background: #ddd;
-                border-radius: 5px;
+                height: 8px;
+                background: #e0e0e0;
+                border-radius: 4px;
             }
             QSlider::handle:horizontal {
-                width: 30px;   /* Increased handle width */
-                height: 30px;  /* Increased handle height */
-                margin: -10px 0;  /* Adjusted margin */
+                width: 24px;
+                height: 24px;
+                margin: -8px 0;
                 background: #e60000;
-                border-radius: 15px;  /* Increased radius */
+                border-radius: 12px;
             }
         """)
         self.train_layout.addWidget(self.train_slider)
@@ -447,19 +456,19 @@ class SelectionPage(QWidget):
             QLabel {
                 font-family: 'Montserrat Bold';
                 font-size: 20px;
-                color: #333;
+                color: #e60000;
             }
         """)
         self.train_layout.addWidget(self.train_value)
-        self.layout.addLayout(self.train_layout)
+        content_layout.addLayout(self.train_layout)
         
-        # Compartment Selection - Same slider modifications
+        # Compartment Selection
         self.compartment_layout = QVBoxLayout()
         self.compartment_layout.setSpacing(5)
-        self.compartment_label = QLabel("Select Compartment Number")
+        self.compartment_label = QLabel("Compartment Number")
         self.compartment_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat Regular';
+                font-family: 'Montserrat SemiBold';
                 font-size: 16px;
                 color: #555;
             }
@@ -476,15 +485,15 @@ class SelectionPage(QWidget):
         self.compartment_value.setAlignment(Qt.AlignCenter)
         self.compartment_value.setStyleSheet(self.train_value.styleSheet())
         self.compartment_layout.addWidget(self.compartment_value)
-        self.layout.addLayout(self.compartment_layout)
+        content_layout.addLayout(self.compartment_layout)
         
-        # Wheel Selection - Same slider modifications
+        # Wheel Selection
         self.wheel_layout = QVBoxLayout()
         self.wheel_layout.setSpacing(5)
-        self.wheel_label = QLabel("Select Wheel Number")
+        self.wheel_label = QLabel("Wheel Number")
         self.wheel_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat Regular';
+                font-family: 'Montserrat SemiBold';
                 font-size: 16px;
                 color: #555;
             }
@@ -501,7 +510,7 @@ class SelectionPage(QWidget):
         self.wheel_value.setAlignment(Qt.AlignCenter)
         self.wheel_value.setStyleSheet(self.train_value.styleSheet())
         self.wheel_layout.addWidget(self.wheel_value)
-        self.layout.addLayout(self.wheel_layout)
+        content_layout.addLayout(self.wheel_layout)
         
         # Start Button
         self.start_button = QPushButton("START INSPECTION")
@@ -510,11 +519,12 @@ class SelectionPage(QWidget):
                 background-color: #e60000;
                 color: white;
                 border: none;
-                border-radius: 10px;
-                padding: 15px;
+                border-radius: 8px;
+                padding: 12px;
                 font-family: 'Montserrat Bold';
                 font-size: 18px;
-                margin-top: 20px;
+                margin-top: 10px;
+                min-height: 50px;
             }
             QPushButton:hover {
                 background-color: #cc0000;
@@ -524,9 +534,10 @@ class SelectionPage(QWidget):
             }
         """)
         self.start_button.clicked.connect(self.start_inspection)
-        self.layout.addWidget(self.start_button)
+        content_layout.addWidget(self.start_button)
         
-        self.layout.addStretch(1)
+        content_frame.setLayout(content_layout)
+        self.layout.addWidget(content_frame, stretch=1)
         self.setLayout(self.layout)
         
         # Connect signals
