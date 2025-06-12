@@ -610,8 +610,7 @@ class InspectionPage(QWidget):
         self.camera_label.setStyleSheet("""
             QLabel {
                 background: black;
-                border: none;
-                margin: 0 auto;
+                border: 3px solid transparent;
             }
         """)
         
@@ -966,7 +965,7 @@ class App(QMainWindow):
             self.inspection_page.camera_label.setStyleSheet("""
                 QLabel {
                     background: black;
-                    border: none;
+                    border: 3px solid transparent;
                 }
             """)
         
@@ -985,7 +984,7 @@ class App(QMainWindow):
         self.inspection_page.camera_label.setStyleSheet("""
             QLabel {
                 background: black;
-                border: none;
+                border: 3px solid transparent;
             }
         """)
         self.inspection_page.diameter_label.hide()
@@ -1175,7 +1174,7 @@ class App(QMainWindow):
         self.inspection_page.camera_label.setStyleSheet("""
             QLabel {
                 background: black;
-                border: none;
+                border: 3px solid transparent;
             }
         """)
         
