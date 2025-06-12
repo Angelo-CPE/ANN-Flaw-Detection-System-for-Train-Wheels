@@ -357,10 +357,10 @@ class SelectionPage(QWidget):
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(30, 20, 30, 30)  # Reduced top margin
-        self.layout.setSpacing(15)  # Reduced spacing
+        self.layout.setContentsMargins(30, 10, 30, 30)  # Reduced top margin from 20 to 10
+        self.layout.setSpacing(10)  # Reduced spacing from 15 to 10
         
-        # Back Button
+        # Back Button (unchanged)
         self.back_button = QPushButton("← Back")
         self.back_button.setStyleSheet("""
             QPushButton {
@@ -385,14 +385,14 @@ class SelectionPage(QWidget):
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
         self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
-        # Logo - with reduced bottom margin
+        # Logo - with reduced size and spacing
         self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignCenter)
         logo_pixmap = QPixmap('logo.png')
         if not logo_pixmap.isNull():
-            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(180, Qt.SmoothTransformation))  # Slightly smaller
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(120, Qt.SmoothTransformation))  # Reduced from 180 to 120
         self.layout.addWidget(self.logo_label)
-        self.layout.addSpacing(10)  # Reduced spacing after logo
+        self.layout.addSpacing(5)  # Reduced spacing from 10 to 5 after logo
         
         # Main content container
         content_frame = QFrame()
@@ -565,7 +565,7 @@ class InspectionPage(QWidget):
         
         # Back Button
         self.back_button = QPushButton("← Back")
-        self.back_button.setStyleSheet( """
+        self.back_button.setStyleSheet("""
             QPushButton {
                 background: #f0f0f0;
                 color: #333;
@@ -585,8 +585,8 @@ class InspectionPage(QWidget):
                 background: #b30000;
             }
         """)
-        self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(1))
-        self.layout.addWidget(self.back_button)
+        self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
+        self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
         # Camera Panel - Modified to take more space
         self.camera_panel = QFrame()
@@ -788,14 +788,14 @@ class CalibrationPage(QWidget):
         
         # Back Button
         self.back_button = QPushButton("← Back")
-        self.back_button.setStyleSheet( """
+        self.back_button.setStyleSheet("""
             QPushButton {
                 background: #f0f0f0;
                 color: #333;
                 border: 1px solid #ddd;
                 border-radius: 5px;
                 padding: 8px 15px;
-                font-family: 'Montserrat Regular';
+                font-family: 'Montserrat SemiBold';
                 font-size: 14px;
                 min-width: 80px;
             }
@@ -809,7 +809,7 @@ class CalibrationPage(QWidget):
             }
         """)
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
-        self.layout.addWidget(self.back_button)
+        self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
         # Title
         self.title_label = QLabel("Calibration")
