@@ -59,9 +59,29 @@
     process.exit(1);
   });
 
+  // MIGRATION SCRIPT
+  mongoose.connection.once('open', async () => {
+    try {
+      const users = await User.find({ 'email.isActive': { $exists: true } });
+      if (users.length > 0) {
+        console.log('Migrating user isActive fields...');
+        await Promise.all(users.map(async user => {
+          if (user.email.isActive !== undefined) {
+            user.isActive = user.email.isActive;
+            delete user.email.isActive;
+            await user.save();
+          }
+        }));
+        console.log('Migration complete');
+      }
+    } catch (err) {
+      console.error('Migration error:', err);
+    }
+  });
+
   const userSchema = new mongoose.Schema({
+    isActive: { type: Boolean, default: true },
     email: { 
-      isActive: { type: Boolean, default: true },
       type: String, 
       required: true, 
       unique: true,
@@ -588,6 +608,15 @@ app.put('/api/admin/users/:id/reactivate', protect, authorize('admin'), async (r
     }
     
     res.json({ success: true, data: user });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/users', protect, authorize('admin'), async (req, res) => {
+  try {
+    const users = await User.find({ isActive: true }).select('-password');
+    res.status(200).json({ success: true, data: users });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
