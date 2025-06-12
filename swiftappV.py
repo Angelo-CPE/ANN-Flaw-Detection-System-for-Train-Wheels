@@ -289,6 +289,9 @@ class HomePage(QWidget):
         self.layout.setContentsMargins(30, 30, 30, 30)
         self.layout.setSpacing(20)
         
+        # Add stretch before content to center everything
+        self.layout.addStretch(1)
+        
         # Logo
         self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignCenter)
@@ -301,7 +304,7 @@ class HomePage(QWidget):
         self.button_layout = QVBoxLayout()
         self.button_layout.setSpacing(20)
         
-        # 1. Inspection Button
+        # Inspection Button
         self.inspection_btn = QPushButton("INSPECTION")
         self.inspection_btn.setStyleSheet("""
             QPushButton {
@@ -323,7 +326,7 @@ class HomePage(QWidget):
         self.inspection_btn.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(1))
         self.button_layout.addWidget(self.inspection_btn)
         
-        # 2. Calibration Button
+        # Calibration Button
         self.calibration_btn = QPushButton("CALIBRATION")
         self.calibration_btn.setStyleSheet("""
             QPushButton {
@@ -346,6 +349,8 @@ class HomePage(QWidget):
         self.button_layout.addWidget(self.calibration_btn)
         
         self.layout.addLayout(self.button_layout)
+        
+        # Add stretch after content to center everything
         self.layout.addStretch(1)
         self.setLayout(self.layout)
 
@@ -357,10 +362,10 @@ class SelectionPage(QWidget):
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(30, 10, 30, 30)  # Reduced top margin from 20 to 10
-        self.layout.setSpacing(10)  # Reduced spacing from 15 to 10
+        self.layout.setContentsMargins(30, 5, 30, 30)  # Reduced top margin from 10 to 5
+        self.layout.setSpacing(5)  # Reduced spacing from 10 to 5
         
-        # Back Button (unchanged)
+        # Back Button
         self.back_button = QPushButton("← Back")
         self.back_button.setStyleSheet("""
             QPushButton {
@@ -385,21 +390,21 @@ class SelectionPage(QWidget):
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
         self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
-        # Logo - with reduced size and spacing
+        # Logo - with reduced spacing
         self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignCenter)
         logo_pixmap = QPixmap('logo.png')
         if not logo_pixmap.isNull():
             self.logo_label.setPixmap(logo_pixmap.scaledToHeight(60, Qt.SmoothTransformation))
         self.layout.addWidget(self.logo_label)
-        self.layout.addSpacing(5)  # Reduced spacing from 10 to 5 after logo
+        self.layout.addSpacing(0)  # Reduced spacing from 5 to 0 after logo
         
         # Main content container
         content_frame = QFrame()
         content_frame.setStyleSheet("QFrame { background: transparent; }")
         content_layout = QVBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(15)
+        content_layout.setSpacing(10)  # Reduced spacing from 15 to 10
         
         # Section title
         section_title = QLabel("SELECT INSPECTION DETAILS")
@@ -441,11 +446,11 @@ class SelectionPage(QWidget):
                 border-radius: 4px;
             }
             QSlider::handle:horizontal {
-                width: 24px;
-                height: 24px;
-                margin: -8px 0;
+                width: 30px;  /* Increased from 24px */
+                height: 30px;  /* Increased from 24px */
+                margin: -11px 0;  /* Adjusted from -8px 0 */
                 background: #e60000;
-                border-radius: 12px;
+                border-radius: 15px;  /* Increased from 12px */
             }
         """)
         self.train_layout.addWidget(self.train_slider)
@@ -462,7 +467,7 @@ class SelectionPage(QWidget):
         self.train_layout.addWidget(self.train_value)
         content_layout.addLayout(self.train_layout)
         
-        # Compartment Selection
+        # Compartment Selection (same slider style changes)
         self.compartment_layout = QVBoxLayout()
         self.compartment_layout.setSpacing(5)
         self.compartment_label = QLabel("Compartment Number")
@@ -487,7 +492,7 @@ class SelectionPage(QWidget):
         self.compartment_layout.addWidget(self.compartment_value)
         content_layout.addLayout(self.compartment_layout)
         
-        # Wheel Selection
+        # Wheel Selection (same slider style changes)
         self.wheel_layout = QVBoxLayout()
         self.wheel_layout.setSpacing(5)
         self.wheel_label = QLabel("Wheel Number")
