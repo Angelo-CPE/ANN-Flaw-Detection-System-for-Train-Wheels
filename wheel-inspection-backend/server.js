@@ -297,6 +297,15 @@
   // API Routes
 
   // Auth Routes 
+
+  app.post('/api/admin/confirm-password', protect, authorize('admin'), async (req, res) => {
+  const { password } = req.body;
+  const user = await User.findById(req.user.id).select('+password');
+  const match = await user.matchPassword(password);
+  if (!match) return res.status(401).json({ error: 'Incorrect password' });
+  res.json({ success: true });
+});
+
   app.get('/api/auth/me', protect, async (req, res) => {
     try {
       const user = await User.findById(req.user.id).select('-password');
@@ -367,7 +376,10 @@
       if (!user) {
         return res.status(401).json({ success: false, error: 'Invalid credentials' });
       }
-      
+      if (!user.isActive) {
+        return res.status(403).json({ error: 'Your account has been deactivated. Please contact the administrator.' });
+      }
+
       const isMatch = await user.matchPassword(password);
       if (!isMatch) {
         return res.status(401).json({ success: false, error: 'Invalid credentials' });
@@ -584,6 +596,15 @@ app.put('/api/admin/users/:id/reactivate', protect, authorize('admin'), async (r
 app.get('/api/admin/users/archived', protect, authorize('admin'), async (req, res) => {
   try {
     const users = await User.find({ isActive: false }).select('-password');
+    res.status(200).json({ success: true, data: users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/users/all', protect, authorize('admin'), async (req, res) => {
+  try {
+    const users = await User.find().select('-password');
     res.status(200).json({ success: true, data: users });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
