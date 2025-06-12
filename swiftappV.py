@@ -138,8 +138,8 @@ class SerialReaderThread(QThread):
     LIFT_OFF_MM = 2.0  # sensor→lever gap when off-wheel
     
     # Calibration constants (update these with your actual calibration values)
-    CAL_700_RAW = 78.0  # gap on 700 mm ring (bigger gap)
-    CAL_600_RAW = 68.0  # gap on 600 mm ring (smaller gap)
+    CAL_700_RAW = 200.0  # gap on 700 mm ring (bigger gap)
+    CAL_600_RAW = 100.0  # gap on 600 mm ring (smaller gap)
     
     # Calculated constants
     M_SLOPE = (700.0 - 600.0) / (CAL_700_RAW - CAL_600_RAW)
@@ -151,6 +151,41 @@ class SerialReaderThread(QThread):
         self.port = port
         self.baudrate = baudrate
         self.serial_conn = None
+        
+        # Try to load calibration values from file
+        self.load_calibration_values()
+    
+    def load_calibration_values(self):
+        try:
+            if os.path.exists("calibration_values.txt"):
+                with open("calibration_values.txt", "r") as f:
+                    lines = f.readlines()
+                    for line in lines:
+                        if "700mm:" in line:
+                            self.CAL_700_RAW = float(line.split(":")[1].strip())
+                        elif "600mm:" in line:
+                            self.CAL_600_RAW = float(line.split(":")[1].strip())
+                        elif "M_SLOPE:" in line:
+                            self.M_SLOPE = float(line.split(":")[1].strip())
+                        elif "B_OFFS:" in line:
+                            self.B_OFFS = float(line.split(":")[1].strip())
+                            
+                # Recalculate in case file was incomplete
+                self.M_SLOPE = (700.0 - 600.0) / (self.CAL_700_RAW - self.CAL_600_RAW)
+                self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
+                
+                print("Loaded calibration values:")
+                print(f"CAL_700_RAW: {self.CAL_700_RAW}")
+                print(f"CAL_600_RAW: {self.CAL_600_RAW}")
+                print(f"M_SLOPE: {self.M_SLOPE}")
+                print(f"B_OFFS: {self.B_OFFS}")
+        except Exception as e:
+            print(f"Error loading calibration values: {e}")
+            # Fall back to defaults
+            self.CAL_700_RAW = 200.0
+            self.CAL_600_RAW = 100.0
+            self.M_SLOPE = (700.0 - 600.0) / (self.CAL_700_RAW - self.CAL_600_RAW)
+            self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
 
     def calculate_diameter(self, g_raw):
         """Calculate wheel diameter from raw sensor reading"""
@@ -1042,6 +1077,19 @@ class CalibrationPage(QWidget):
         if self.current_reading is not None:
             self.calibration_values[wheel_type] = self.current_reading
             self.status_label.setText(f"{wheel_type} calibrated at {self.current_reading} mm")
+            
+            # Update the calibration constants in SerialReaderThread
+            if wheel_type == "700mm":
+                SerialReaderThread.CAL_700_RAW = self.current_reading
+            else:
+                SerialReaderThread.CAL_600_RAW = self.current_reading
+                
+            # Recalculate the slope and offset
+            SerialReaderThread.M_SLOPE = (700.0 - 600.0) / (
+                SerialReaderThread.CAL_700_RAW - SerialReaderThread.CAL_600_RAW
+            )
+            SerialReaderThread.B_OFFS = 700.0 - SerialReaderThread.M_SLOPE * SerialReaderThread.CAL_700_RAW
+            
             self.save_calibration_values()
         
         # Re-enable buttons
@@ -1055,11 +1103,13 @@ class CalibrationPage(QWidget):
         self.calib_600_button.setEnabled(True)
 
     def save_calibration_values(self):
-        # Here you would save to a file or database
+        # Save to file with the new format that includes recalculated constants
         print("Calibration values:", self.calibration_values)
         with open("calibration_values.txt", "w") as f:
             f.write(f"700mm: {self.calibration_values['700mm']}\n")
             f.write(f"600mm: {self.calibration_values['600mm']}\n")
+            f.write(f"M_SLOPE: {SerialReaderThread.M_SLOPE}\n")
+            f.write(f"B_OFFS: {SerialReaderThread.B_OFFS}\n")
 
 class App(QMainWindow):
     def __init__(self):
