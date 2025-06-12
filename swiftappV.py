@@ -79,11 +79,11 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
             os.remove(temp_img_path)
 
 class SerialReaderThread(QThread):
-    distance_measured = pyqtSignal(int)
+    distance_measured = pyqtSignal(float)  # Changed to float for precision
     measurement_complete = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, port='/dev/ttyACM0', baudrate=9600):
+    def __init__(self, port='/dev/ttyACM0', baudrate=9600):  # Updated baudrate to match Arduino
         super().__init__()
         self._run_flag = True
         self.port = port
@@ -95,25 +95,27 @@ class SerialReaderThread(QThread):
             self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=1)
             time.sleep(2)  # Wait for Arduino to initialize
             
-            start_time = time.time()
             valid_readings = []
+            start_time = time.time()
             
-            while time.time() - start_time < 2.0 and self._run_flag:  # Measure for 2 seconds
+            # Collect readings for 2 seconds
+            while time.time() - start_time < 2.0 and self._run_flag:
                 if self.serial_conn.in_waiting > 0:
                     line = self.serial_conn.readline().decode('utf-8').strip()
                     try:
-                        distance = int(line)
-                        if distance > 0:  # Ignore error values (0)
-                            valid_readings.append(distance)
-                            self.distance_measured.emit(distance)
+                        # Arduino outputs diameter directly with 2 decimal places
+                        diameter = float(line)
+                        if diameter > 0:  # Ignore error values
+                            valid_readings.append(diameter)
+                            self.distance_measured.emit(diameter)
                     except ValueError:
                         pass
                 time.sleep(0.01)
                 
             # Calculate median of valid readings
             if valid_readings:
-                median_distance = int(np.median(valid_readings))
-                self.distance_measured.emit(median_distance)
+                median_diameter = float(np.median(valid_readings))
+                self.distance_measured.emit(median_diameter)
                 
         except Exception as e:
             self.error_occurred.emit(str(e))
@@ -1137,35 +1139,42 @@ class App(QMainWindow):
         self.inspection_page.diameter_label.setText("Measuring...")
         self.inspection_page.diameter_label.show()
 
+        # Disable all buttons during measurement
         self.inspection_page.detect_btn.setEnabled(False)
         self.inspection_page.measure_btn.setEnabled(False)
         self.inspection_page.save_btn.setEnabled(False)
 
         try:
             self.serial_thread = SerialReaderThread()
-            self.serial_thread.distance_measured.connect(self.update_distance)
-            self.serial_thread.measurement_complete.connect(self.on_measurement_complete)
-            self.serial_thread.error_occurred.connect(self.on_measurement_error)
+            self.serial_thread.distance_measured.connect(self.update_diameter)
+            self.serial_thread.measurement_complete.connect(self.on_diameter_measurement_complete)
+            self.serial_thread.error_occurred.connect(self.on_diameter_measurement_error)
             self.serial_thread.start()
 
         except Exception as e:
             print(f"Serial connection error: {e}")
-            self.on_measurement_error(f"Serial error: {str(e)}")
+            self.on_diameter_measurement_error(f"Serial error: {str(e)}")
 
-    def update_distance(self, distance):
-        self.current_distance = distance
-        self.inspection_page.diameter_label.setText(f"Wheel Diameter: {distance} mm")
-        
-    def on_measurement_error(self, error_msg):
+    def update_diameter(self, diameter):
+        # Store the precise diameter measurement
+        self.current_distance = diameter
+        # Display with 2 decimal places for precision
+        self.inspection_page.diameter_label.setText(f"Wheel Diameter: {diameter:.2f} mm")
+
+    def on_diameter_measurement_error(self, error_msg):
         print(f"Measurement error: {error_msg}")
         self.inspection_page.diameter_label.setText("Measurement Error")
-        self.on_measurement_complete()
+        self.on_diameter_measurement_complete()
 
-    def on_measurement_complete(self):
-        # After measurement, show Reset and Save buttons
-        self.inspection_page.detect_btn.setVisible(False)
-        self.inspection_page.measure_btn.setVisible(False)
-        self.inspection_page.save_btn.setEnabled(True)
+    def on_diameter_measurement_complete(self):
+        # After measurement, enable appropriate buttons
+        self.inspection_page.detect_btn.setEnabled(False)
+        self.inspection_page.measure_btn.setEnabled(False)
+        
+        # Only enable save if we have both detection and measurement
+        if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
+            self.inspection_page.save_btn.setEnabled(True)
+        
         self.inspection_page.save_btn.setVisible(True)
         self.inspection_page.reset_btn.setVisible(True)
 
