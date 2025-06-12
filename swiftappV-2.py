@@ -371,13 +371,26 @@ class App(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.central_widget.setStyleSheet("background: white;")
         
-        # Main horizontal layout
-        self.main_layout = QHBoxLayout()
+        self.camera_title = QLabel("WHEEL INSPECTION CAMERA")
+        self.camera_title.setAlignment(Qt.AlignCenter)
+        self.camera_title.setStyleSheet("""
+            QLabel {
+                color: #333;
+                font-family: 'Montserrat Bold';
+                font-size: 18px;
+                padding: 5px 0;
+            }
+        """)
+        self.camera_layout.addWidget(self.camera_title)
+        self.camera_layout.addWidget(self.camera_label)
+
+        # Main vertical layout (changed from QHBoxLayout)
+        self.main_layout = QVBoxLayout()
         self.main_layout.setContentsMargins(10, 10, 10, 10)
         self.main_layout.setSpacing(10)
         self.central_widget.setLayout(self.main_layout)
         
-        # Left side - Camera Panel
+        # Camera Panel (now at top)
         self.camera_panel = QFrame()
         self.camera_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.camera_layout = QVBoxLayout()
@@ -387,18 +400,24 @@ class App(QMainWindow):
         self.camera_label = QLabel()
         self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.camera_label.setMinimumSize(480, 360)
+        self.camera_label.setMinimumSize(640, 480)  # Slightly larger for top placement
         self.camera_label.setStyleSheet("QLabel { background: black; border: none; }")
         
         self.camera_layout.addWidget(self.camera_label)
         self.camera_panel.setLayout(self.camera_layout)
         
-        # Right side - Control Panel
+        # Control Panel (now at bottom)
         self.control_panel = QFrame()
-        self.control_panel.setStyleSheet("QFrame { background: white; border: none; }")
+        self.control_panel.setStyleSheet("""
+            QFrame { 
+                background: white; 
+                border: none;
+                border-top: 1px solid #eee;
+            }
+        """)
         self.control_layout = QVBoxLayout()
-        self.control_layout.setContentsMargins(0, 0, 0, 0)
-        self.control_layout.setSpacing(10)
+        self.control_layout.setContentsMargins(20, 10, 20, 10)
+        self.control_layout.setSpacing(15)
         
         # Status Panel
         self.status_panel = QFrame()
@@ -800,8 +819,8 @@ class App(QMainWindow):
         self.control_panel.setLayout(self.control_layout)
         
         # Add panels to main layout with proper stretch factors
-        self.main_layout.addWidget(self.camera_panel, 60)  # 60% width
-        self.main_layout.addWidget(self.control_panel, 40)  # 40% width
+        self.main_layout.addWidget(self.camera_panel, 70)  # 70% HEIGHT
+        self.main_layout.addWidget(self.control_panel, 30)  # 30% HEIGHT
         
         self.setup_animations()
         self.setup_camera_thread()
