@@ -77,7 +77,7 @@ const userSchema = new mongoose.Schema({
     select: false,
     validate: {
       validator: function(v) {
-        return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(v);
+        return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$/.test(v);
       },
       message: props => 
         'Password must contain at least 8 characters, one uppercase, one lowercase, one number and one special character'
@@ -86,9 +86,14 @@ const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   role: { type: String, enum: ['user', 'admin'], default: 'user' },
   createdAt: { type: Date, default: Date.now },
+
+  otp: { type: String },
+  otpExpiry: { type: Date },
+
   resetPasswordToken: String,
   resetPasswordExpire: Date
 });
+
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {
