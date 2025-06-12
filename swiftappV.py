@@ -128,7 +128,7 @@ class CalibrationSerialThread(QThread):
         self.wait()
 
 class SerialReaderThread(QThread):
-    diameter_measured = pyqtSignal(float)  # Changed to float for precise diameter
+    diameter_measured = pyqtSignal(float)  # Final diameter in mm
     measurement_complete = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
