@@ -447,7 +447,7 @@ class App(QMainWindow):
         self.train_label = QLabel("Train")
         self.train_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat SemiBold';
+                font-family: 'Montserrat Bold';
                 font-size: 15px;
                 color: #333;
                 padding-right: 6px;
@@ -503,7 +503,7 @@ class App(QMainWindow):
         self.compartment_label = QLabel("Compartment")
         self.compartment_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat SemiBold';
+                font-family: 'Montserrat Bold';
                 font-size: 15px;
                 color: #333;
                 padding-right: 6px;
@@ -1033,7 +1033,6 @@ if __name__ == '__main__':
         "Montserrat-Black.ttf",
         "Montserrat-Bold.ttf",
         "Montserrat-ExtraBold.ttf",
-        "Montserrat-SemiBold.ttf",
         "Montserrat-Regular.ttf"
     ]
     
