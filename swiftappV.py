@@ -597,15 +597,23 @@ class InspectionPage(QWidget):
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
         self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
-        # Camera Panel - Modified to take more space
+        # Main content area
+        self.main_content = QFrame()
+        self.main_content.setStyleSheet("QFrame { background: transparent; }")
+        self.main_layout = QHBoxLayout()
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(10)
+        
+        # Camera Panel - Fixed size
         self.camera_panel = QFrame()
         self.camera_panel.setStyleSheet("QFrame { background: white; border: 3px solid transparent; }")
+        self.camera_panel.setFixedSize(480, 360)  # Fixed size to prevent movement
         self.camera_layout = QVBoxLayout()
         self.camera_layout.setContentsMargins(0, 0, 0, 0)
         
         self.camera_label = QLabel()
         self.camera_label.setAlignment(Qt.AlignCenter)
-        self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.camera_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         self.camera_label.setMinimumSize(480, 360)
         self.camera_label.setStyleSheet("""
             QLabel {
@@ -616,11 +624,12 @@ class InspectionPage(QWidget):
         
         self.camera_layout.addWidget(self.camera_label)
         self.camera_panel.setLayout(self.camera_layout)
-        self.layout.addWidget(self.camera_panel, 70)  # Increased weight to 70
+        self.main_layout.addWidget(self.camera_panel, 0, Qt.AlignCenter)
         
-        # Control Panel
+        # Control Panel - Fixed width
         self.control_panel = QFrame()
         self.control_panel.setStyleSheet("QFrame { background: white; border: none; }")
+        self.control_panel.setFixedWidth(400)  # Fixed width to prevent stretching
         self.control_layout = QVBoxLayout()
         self.control_layout.setContentsMargins(0, 0, 0, 0)
         self.control_layout.setSpacing(10)
@@ -702,14 +711,14 @@ class InspectionPage(QWidget):
         self.status_panel.setLayout(self.status_layout)
         self.control_layout.addWidget(self.status_panel)
         
-        # Button Panel - Modified for horizontal layout
+        # Button Panel - Fixed size with centered buttons
         self.button_panel = QFrame()
         self.button_panel.setStyleSheet("QFrame { background: white; border: none; }")
-        self.button_layout = QHBoxLayout()  # Changed to QHBoxLayout
+        self.button_layout = QHBoxLayout()
         self.button_layout.setContentsMargins(0, 10, 0, 10)
         self.button_layout.setSpacing(10)
         
-        # 1. Detect Flaws Button - Modified to be more square
+        # Button style
         button_style = """
             QPushButton {
                 background-color: %s;
@@ -721,6 +730,7 @@ class InspectionPage(QWidget):
                 border-radius: 8px;
                 min-width: 140px;
                 min-height: 80px;
+                max-width: 140px;
             }
             QPushButton:hover { background-color: %s; }
             QPushButton:pressed { background-color: %s; }
@@ -729,39 +739,49 @@ class InspectionPage(QWidget):
                 color: #ccc;
             }
         """
-        self.detect_btn = QPushButton("DETECT\nFLAWS")  # Added line break
+        
+        # Create button container to center buttons
+        self.button_container = QFrame()
+        self.button_container.setStyleSheet("QFrame { background: transparent; }")
+        self.button_container_layout = QHBoxLayout()
+        self.button_container_layout.setContentsMargins(0, 0, 0, 0)
+        self.button_container_layout.setSpacing(10)
+        
+        self.detect_btn = QPushButton("DETECT\nFLAWS")
         self.detect_btn.setCursor(Qt.PointingHandCursor)
         self.detect_btn.setStyleSheet(button_style % ("#e60000", "#cc0000", "#b30000"))
         
-        # 2. Measure Diameter Button - Modified to be more square
-        self.measure_btn = QPushButton("MEASURE\nDIAMETER")  # Added line break
+        self.measure_btn = QPushButton("MEASURE\nDIAMETER")
         self.measure_btn.setEnabled(False)
         self.measure_btn.setCursor(Qt.PointingHandCursor)
         self.measure_btn.setStyleSheet(button_style % ("#0066cc", "#0055aa", "#004488"))
         
-        # 3. Save Report Button - Modified to be more square
-        self.save_btn = QPushButton("SAVE\nREPORT")  # Added line break
+        self.save_btn = QPushButton("SAVE\nREPORT")
         self.save_btn.setEnabled(False)
         self.save_btn.setVisible(False)
         self.save_btn.setCursor(Qt.PointingHandCursor)
         self.save_btn.setStyleSheet(button_style % ("#FFC107", "#FFB300", "#FFA000"))
         
-        # 4. Reset Button - Modified to be more square
-        self.reset_btn = QPushButton("NEW\nINSPECTION")  # Added line break
+        self.reset_btn = QPushButton("NEW\nINSPECTION")
         self.reset_btn.setVisible(False)
         self.reset_btn.setCursor(Qt.PointingHandCursor)
         self.reset_btn.setStyleSheet(button_style % ("#000000", "#333333", "#222222"))
         
-        self.button_layout.addWidget(self.detect_btn)
-        self.button_layout.addWidget(self.measure_btn)
-        self.button_layout.addWidget(self.save_btn)
-        self.button_layout.addWidget(self.reset_btn)
+        self.button_container_layout.addWidget(self.detect_btn)
+        self.button_container_layout.addWidget(self.measure_btn)
+        self.button_container_layout.addWidget(self.save_btn)
+        self.button_container_layout.addWidget(self.reset_btn)
+        self.button_container.setLayout(self.button_container_layout)
         
+        self.button_layout.addWidget(self.button_container)
         self.button_panel.setLayout(self.button_layout)
         self.control_layout.addWidget(self.button_panel)
         
         self.control_panel.setLayout(self.control_layout)
-        self.layout.addWidget(self.control_panel, 30)  # Reduced weight to 30
+        self.main_layout.addWidget(self.control_panel, 0, Qt.AlignCenter)
+        
+        self.main_content.setLayout(self.main_layout)
+        self.layout.addWidget(self.main_content)
         self.setLayout(self.layout)
         
         # Connect signals
