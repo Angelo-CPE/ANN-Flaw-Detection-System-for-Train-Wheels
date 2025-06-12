@@ -496,7 +496,9 @@
   const { tempToken, password } = req.body;
 
   try {
+    console.log('[DEBUG] tempToken received:', tempToken);
     const decoded = jwt.verify(tempToken, JWT_SECRET);
+    console.log('[DEBUG] token payload:', decoded);
 
     const user = await User.findOne({ email: decoded.email }).select('+password');
     if (!user) {
