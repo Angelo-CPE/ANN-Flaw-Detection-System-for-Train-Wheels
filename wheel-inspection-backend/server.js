@@ -429,6 +429,93 @@ app.put('/api/auth/resetpassword/:token', async (req, res) => {
   }
 });
 
+// Generate and send OTP
+app.post('/api/auth/request-otp', async (req, res) => {
+  const { email } = req.body;
+  
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: 'No user with this email' });
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    user.otp = otp;
+    user.otpExpiry = otpExpiry;
+    await user.save();
+
+    // Send email
+    await transporter.sendMail({
+      to: user.email,
+      subject: 'Your Password Reset OTP',
+      text: `Your OTP is: ${otp}\n\nValid for 10 minutes.`
+    });
+
+    res.json({ message: 'OTP sent successfully' });
+  } catch (err) {
+    console.error('OTP send error:', err);
+    res.status(500).json({ error: 'Failed to send OTP' });
+  }
+});
+
+// Verify OTP
+app.post('/api/auth/verify-otp', async (req, res) => {
+  const { email, otp } = req.body;
+  
+  try {
+    const user = await User.findOne({ 
+      email,
+      otp,
+      otpExpiry: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
+
+    // OTP is valid
+    res.json({ 
+      success: true,
+      tempToken: jwt.sign({ email }, JWT_SECRET, { expiresIn: '5m' })
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'OTP verification failed' });
+  }
+});
+
+// Update password after OTP verification
+app.put('/api/auth/update-password', [
+  body('password').isStrongPassword().withMessage('Password must be strong')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { tempToken, password } = req.body;
+
+  try {
+    const decoded = jwt.verify(tempToken, JWT_SECRET);
+    const user = await User.findOne({ email: decoded.email });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid token' });
+    }
+
+    user.password = password;
+    user.otp = undefined;
+    user.otpExpiry = undefined;
+    await user.save();
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (err) {
+    res.status(401).json({ error: 'Token expired or invalid' });
+  }
+});
+
 // Report Routes (protected)
 app.get('/api/reports', protect, async (req, res) => {
   try {
