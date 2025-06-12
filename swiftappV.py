@@ -566,6 +566,8 @@ class SelectionPage(QWidget):
         self.parent.trainNumber = self.train_slider.value()
         self.parent.compartmentNumber = self.compartment_slider.value()
         self.parent.wheelNumber = self.wheel_slider.value()
+        # Update the inspection page's selection label
+        self.parent.inspection_page.update_selection_label()
         self.parent.stacked_widget.setCurrentIndex(2)
 
 class InspectionPage(QWidget):
@@ -579,31 +581,6 @@ class InspectionPage(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.layout.setSpacing(10)
-        
-        # Back Button
-        self.back_button = QPushButton("← Back")
-        self.back_button.setStyleSheet("""
-            QPushButton {
-                background: #f0f0f0;
-                color: #333;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 8px 15px;
-                font-family: 'Montserrat SemiBold';
-                font-size: 14px;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background: #e60000;
-                color: white;
-                border-color: #e60000;
-            }
-            QPushButton:pressed {
-                background: #b30000;
-            }
-        """)
-        self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
-        self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
         # Camera Panel - Top section
         self.camera_panel = QFrame()
@@ -1162,6 +1139,7 @@ class App(QMainWindow):
 
     def reset_ui(self):
         self.stacked_widget.setCurrentIndex(1)  # Go back to selection page
+        self.inspection_page.update_selection_label()
         self.inspection_page.status_indicator.setText("READY")
         self.inspection_page.recommendation_indicator.setText("")
         self.inspection_page.diameter_label.setText("Wheel Diameter: -")
