@@ -294,11 +294,11 @@ class HomePage(QWidget):
         self.logo_label.setAlignment(Qt.AlignCenter)
         logo_pixmap = QPixmap('logo.png')
         if not logo_pixmap.isNull():
-            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(120, Qt.SmoothTransformation))
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(200, Qt.SmoothTransformation))
         self.layout.addWidget(self.logo_label)
         
         # Title
-        self.title_label = QLabel("Wheel Inspection System")
+        self.title_label = QLabel("Smart Wheel Inspection System for Train")
         self.title_label.setAlignment(Qt.AlignCenter)
         self.title_label.setStyleSheet("""
             QLabel {
@@ -412,7 +412,7 @@ class SelectionPage(QWidget):
         self.train_label = QLabel("Select Train Number")
         self.train_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat';
+                font-family: 'Montserrat Regular';
                 font-size: 16px;
                 color: #555;
             }
@@ -459,7 +459,7 @@ class SelectionPage(QWidget):
         self.compartment_label = QLabel("Select Compartment Number")
         self.compartment_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat';
+                font-family: 'Montserrat Regular';
                 font-size: 16px;
                 color: #555;
             }
@@ -484,7 +484,7 @@ class SelectionPage(QWidget):
         self.wheel_label = QLabel("Select Wheel Number")
         self.wheel_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat';
+                font-family: 'Montserrat Regular';
                 font-size: 16px;
                 color: #555;
             }
@@ -656,7 +656,7 @@ class InspectionPage(QWidget):
         self.recommendation_indicator.setStyleSheet("""
             QLabel {
                 color: #666;
-                font-family: 'Montserrat';
+                font-family: 'Montserrat Regular';
                 font-size: 14px;
                 padding-top: 0px;
                 padding-bottom: 0px;
@@ -668,7 +668,7 @@ class InspectionPage(QWidget):
         self.diameter_label.setStyleSheet("""
             QLabel {
                 color: #333;
-                font-family: 'Montserrat';
+                font-family: 'Montserrat Regular';
                 font-size: 14px;
                 padding-top: 0px;
                 padding-bottom: 0px;
@@ -718,20 +718,20 @@ class InspectionPage(QWidget):
         self.measure_btn = QPushButton("MEASURE\nDIAMETER")  # Added line break
         self.measure_btn.setEnabled(False)
         self.measure_btn.setCursor(Qt.PointingHandCursor)
-        self.measure_btn.setStyleSheet(button_style % ("#333", "#111", "#000"))
+        self.measure_btn.setStyleSheet(button_style % ("#0066cc", "#0055aa", "#004488"))
         
         # 3. Save Report Button - Modified to be more square
         self.save_btn = QPushButton("SAVE\nREPORT")  # Added line break
         self.save_btn.setEnabled(False)
         self.save_btn.setVisible(False)
         self.save_btn.setCursor(Qt.PointingHandCursor)
-        self.save_btn.setStyleSheet(button_style % ("#006600", "#004400", "#002200"))
+        self.save_btn.setStyleSheet(button_style % ("#FFC107", "#FFB300", "#FFA000"))
         
         # 4. Reset Button - Modified to be more square
         self.reset_btn = QPushButton("NEW\nINSPECTION")  # Added line break
         self.reset_btn.setVisible(False)
         self.reset_btn.setCursor(Qt.PointingHandCursor)
-        self.reset_btn.setStyleSheet(button_style % ("#444", "#222", "#111"))
+        self.reset_btn.setStyleSheet(button_style % ("#000000", "#333333", "#222222"))
         
         self.button_layout.addWidget(self.detect_btn)
         self.button_layout.addWidget(self.measure_btn)
@@ -784,7 +784,7 @@ class CalibrationPage(QWidget):
                 border: 1px solid #ddd;
                 border-radius: 5px;
                 padding: 8px 15px;
-                font-family: 'Montserrat SemiBold';
+                font-family: 'Montserrat Regular';
                 font-size: 14px;
                 min-width: 80px;
             }
@@ -818,7 +818,7 @@ class CalibrationPage(QWidget):
         self.placeholder_label.setAlignment(Qt.AlignCenter)
         self.placeholder_label.setStyleSheet("""
             QLabel {
-                font-family: 'Montserrat';
+                font-family: 'Montserrat Regular';
                 font-size: 18px;
                 color: #666;
                 padding: 20px 0;
@@ -1070,7 +1070,7 @@ class App(QMainWindow):
             QMessageBox {
                 background-color: white;
                 border: 1px solid #ddd;
-                font-family: 'Montserrat';
+                font-family: 'Montserrat Regular';
             }
             QLabel {
                 color: black;
@@ -1147,7 +1147,7 @@ class App(QMainWindow):
         self.inspection_page.recommendation_indicator.setStyleSheet("""
             QLabel {
                 color: #666;
-                font-family: 'Montserrat';
+                font-family: 'Montserrat Regular';
                 font-size: 14px;
                 padding: 10px 0;
             }
@@ -1192,21 +1192,24 @@ if __name__ == "__main__":
     
     # Load Montserrat font if available
     font_db = QFontDatabase()
-    if "Montserrat" not in font_db.families():
+    if "Montserrat Regular" not in font_db.families():
         # Try to load the font from file if not found
-        font_paths = [
-            "Montserrat-Regular.ttf",
-            "fonts/Montserrat-Regular.ttf",
-            "/usr/share/fonts/truetype/montserrat/Montserrat-Regular.ttf"
-        ]
-        for path in font_paths:
-            if os.path.exists(path):
-                font_id = font_db.addApplicationFont(path)
-                if font_id != -1:
-                    break
+        font_paths = {
+            "Montserrat Regular": "Montserrat-Regular.ttf",
+            "Montserrat Bold": "Montserrat-Bold.ttf",
+            "Montserrat ExtraBold": "Montserrat-ExtraBold.ttf",
+            "Montserrat Black": "Montserrat-Black.ttf"
+        }
+        for font_name, path in font_paths.items():
+            if not os.path.exists(path):
+                print(f"Font file not found: {path}")
+                continue
+            font_id = font_db.addApplicationFont(path)
+            if font_id == -1:
+                print(f"Failed to load font: {path}")
     
     # Set application font
-    font = QFont("Montserrat", 12)
+    font = QFont("Montserrat Regular", 12)
     app.setFont(font)
     
     palette = app.palette()
