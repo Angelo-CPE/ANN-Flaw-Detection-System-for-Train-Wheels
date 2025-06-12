@@ -599,7 +599,7 @@ class InspectionPage(QWidget):
         
         # Camera Panel - Modified to take more space
         self.camera_panel = QFrame()
-        self.camera_panel.setStyleSheet("QFrame { background: white; border: none; }")
+        self.camera_panel.setStyleSheet("QFrame { background: white; border: 3px solid transparent; }")
         self.camera_layout = QVBoxLayout()
         self.camera_layout.setContentsMargins(0, 0, 0, 0)
         
