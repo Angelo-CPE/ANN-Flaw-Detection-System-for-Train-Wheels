@@ -278,7 +278,7 @@ class CameraThread(QThread):
         self._run_flag = False
         self.wait()
 
-class SelectionPage(QWidget):
+class HomePage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
@@ -298,12 +298,115 @@ class SelectionPage(QWidget):
         self.layout.addWidget(self.logo_label)
         
         # Title
-        self.title_label = QLabel("Wheel Inspection")
+        self.title_label = QLabel("Wheel Inspection System")
         self.title_label.setAlignment(Qt.AlignCenter)
         self.title_label.setStyleSheet("""
             QLabel {
                 font-family: 'Montserrat Bold';
                 font-size: 28px;
+                color: #333;
+                padding: 10px 0;
+            }
+        """)
+        self.layout.addWidget(self.title_label)
+        
+        # Buttons
+        self.button_layout = QVBoxLayout()
+        self.button_layout.setSpacing(20)
+        
+        # 1. Inspection Button
+        self.inspection_btn = QPushButton("INSPECTION")
+        self.inspection_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e60000;
+                color: white;
+                border: none;
+                border-radius: 10px;
+                padding: 15px;
+                font-family: 'Montserrat Bold';
+                font-size: 18px;
+            }
+            QPushButton:hover {
+                background-color: #cc0000;
+            }
+            QPushButton:pressed {
+                background-color: #b30000;
+            }
+        """)
+        self.inspection_btn.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(1))
+        self.button_layout.addWidget(self.inspection_btn)
+        
+        # 2. Calibration Button
+        self.calibration_btn = QPushButton("CALIBRATION")
+        self.calibration_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #333;
+                color: white;
+                border: none;
+                border-radius: 10px;
+                padding: 15px;
+                font-family: 'Montserrat Bold';
+                font-size: 18px;
+            }
+            QPushButton:hover {
+                background-color: #111;
+            }
+            QPushButton:pressed {
+                background-color: #000;
+            }
+        """)
+        self.calibration_btn.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(3))
+        self.button_layout.addWidget(self.calibration_btn)
+        
+        self.layout.addLayout(self.button_layout)
+        self.layout.addStretch(1)
+        self.setLayout(self.layout)
+
+class SelectionPage(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(30, 30, 30, 30)
+        self.layout.setSpacing(20)
+        
+        # Back Button
+        self.back_button = QPushButton("← Back")
+        self.back_button.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #333;
+                border: none;
+                padding: 5px;
+                font-family: 'Montserrat';
+                font-size: 14px;
+                text-align: left;
+            }
+            QPushButton:hover {
+                color: #e60000;
+            }
+        """)
+        self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
+        self.layout.addWidget(self.back_button)
+        
+        # Logo
+        self.logo_label = QLabel()
+        self.logo_label.setAlignment(Qt.AlignCenter)
+        logo_pixmap = QPixmap('logo.png')
+        if not logo_pixmap.isNull():
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(100, Qt.SmoothTransformation))
+        self.layout.addWidget(self.logo_label)
+        
+        # Title
+        self.title_label = QLabel("Wheel Inspection")
+        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat Bold';
+                font-size: 24px;
                 color: #333;
                 padding: 10px 0;
             }
@@ -442,7 +545,7 @@ class SelectionPage(QWidget):
         self.parent.trainNumber = self.train_slider.value()
         self.parent.compartmentNumber = self.compartment_slider.value()
         self.parent.wheelNumber = self.wheel_slider.value()
-        self.parent.stacked_widget.setCurrentIndex(1)
+        self.parent.stacked_widget.setCurrentIndex(2)
 
 class InspectionPage(QWidget):
     def __init__(self, parent=None):
@@ -455,6 +558,25 @@ class InspectionPage(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.layout.setSpacing(10)
+        
+        # Back Button
+        self.back_button = QPushButton("← Back")
+        self.back_button.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #333;
+                border: none;
+                padding: 5px;
+                font-family: 'Montserrat';
+                font-size: 14px;
+                text-align: left;
+            }
+            QPushButton:hover {
+                color: #e60000;
+            }
+        """)
+        self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(1))
+        self.layout.addWidget(self.back_button)
         
         # Camera Panel
         self.camera_panel = QFrame()
@@ -677,6 +799,65 @@ class InspectionPage(QWidget):
         self.status_animation.setStartValue(0.7)
         self.status_animation.setEndValue(1.0)
 
+class CalibrationPage(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(30, 30, 30, 30)
+        self.layout.setSpacing(20)
+        
+        # Back Button
+        self.back_button = QPushButton("← Back")
+        self.back_button.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #333;
+                border: none;
+                padding: 5px;
+                font-family: 'Montserrat';
+                font-size: 14px;
+                text-align: left;
+            }
+            QPushButton:hover {
+                color: #e60000;
+            }
+        """)
+        self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
+        self.layout.addWidget(self.back_button)
+        
+        # Title
+        self.title_label = QLabel("Calibration")
+        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat Bold';
+                font-size: 28px;
+                color: #333;
+                padding: 10px 0;
+            }
+        """)
+        self.layout.addWidget(self.title_label)
+        
+        # Placeholder content
+        self.placeholder_label = QLabel("Wheel Diameter Measurement Calibration")
+        self.placeholder_label.setAlignment(Qt.AlignCenter)
+        self.placeholder_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat';
+                font-size: 18px;
+                color: #666;
+                padding: 20px 0;
+            }
+        """)
+        self.layout.addWidget(self.placeholder_label)
+        
+        self.layout.addStretch(1)
+        self.setLayout(self.layout)
+
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -706,12 +887,16 @@ class App(QMainWindow):
         self.main_layout.addWidget(self.stacked_widget)
         
         # Create pages
+        self.home_page = HomePage(self)
         self.selection_page = SelectionPage(self)
         self.inspection_page = InspectionPage(self)
+        self.calibration_page = CalibrationPage(self)
         
         # Add pages to stacked widget
-        self.stacked_widget.addWidget(self.selection_page)
-        self.stacked_widget.addWidget(self.inspection_page)
+        self.stacked_widget.addWidget(self.home_page)          # Index 0
+        self.stacked_widget.addWidget(self.selection_page)     # Index 1
+        self.stacked_widget.addWidget(self.inspection_page)   # Index 2
+        self.stacked_widget.addWidget(self.calibration_page)  # Index 3
         
         # Setup camera thread
         self.setup_camera_thread()
@@ -738,10 +923,10 @@ class App(QMainWindow):
 
     def update_status(self, status, recommendation):
         if status in ["FLAW DETECTED", "NO FLAW"]:
-            if hasattr(self, 'current_distance'):
-                self.inspection_page.diameter_label.setText("Wheel Diameter: Measure Next")
+            if hasattr(self, 'current_distance') and self.current_distance != 680:
+                self.inspection_page.diameter_label.setText(f"Wheel Diameter: {self.current_distance} mm")
             else:
-                self.inspection_page.diameter_label.setText("Wheel Diameter: -")
+                self.inspection_page.diameter_label.setText("Wheel Diameter: Measure Next")
             self.inspection_page.diameter_label.show()
         else:
             self.inspection_page.diameter_label.hide()
@@ -976,7 +1161,7 @@ class App(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Failed to save report: {str(e)}")
 
     def reset_ui(self):
-        self.stacked_widget.setCurrentIndex(0)
+        self.stacked_widget.setCurrentIndex(1)  # Go back to selection page
         self.inspection_page.status_indicator.setText("READY")
         self.inspection_page.recommendation_indicator.setText("")
         self.inspection_page.diameter_label.setText("Wheel Diameter: -")
