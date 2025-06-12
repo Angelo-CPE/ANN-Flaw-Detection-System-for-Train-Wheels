@@ -786,11 +786,13 @@ class CalibrationPage(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.setup_ui()
+        self.setup_serial()
+        self.calibration_values = {"700mm": None, "600mm": None}
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(30, 30, 30, 30)
-        self.layout.setSpacing(20)
+        self.layout.setContentsMargins(30, 20, 30, 30)
+        self.layout.setSpacing(15)
         
         # Back Button
         self.back_button = QPushButton("← Back")
@@ -817,7 +819,15 @@ class CalibrationPage(QWidget):
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
         self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
-        # Title
+        # Logo
+        self.logo_label = QLabel()
+        self.logo_label.setAlignment(Qt.AlignCenter)
+        logo_pixmap = QPixmap('logo.png')
+        if not logo_pixmap.isNull():
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(80, Qt.SmoothTransformation))
+        self.layout.addWidget(self.logo_label)
+        
+        # Main Title
         self.title_label = QLabel("Calibration")
         self.title_label.setAlignment(Qt.AlignCenter)
         self.title_label.setStyleSheet("""
@@ -825,26 +835,148 @@ class CalibrationPage(QWidget):
                 font-family: 'Montserrat Bold';
                 font-size: 28px;
                 color: #333;
-                padding: 10px 0;
+                padding: 5px 0;
             }
         """)
         self.layout.addWidget(self.title_label)
         
-        # Placeholder content
-        self.placeholder_label = QLabel("Wheel Diameter Measurement Calibration")
-        self.placeholder_label.setAlignment(Qt.AlignCenter)
-        self.placeholder_label.setStyleSheet("""
+        # 700mm Calibration Section
+        self.calib_700_group = self.create_calibration_group("700 mm Train Wheel", "1st Calibration")
+        self.layout.addWidget(self.calib_700_group)
+        
+        # 600mm Calibration Section
+        self.calib_600_group = self.create_calibration_group("600 mm Train Wheel", "2nd Calibration")
+        self.layout.addWidget(self.calib_600_group)
+        
+        # Status Label
+        self.status_label = QLabel()
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setStyleSheet("""
             QLabel {
                 font-family: 'Montserrat Regular';
-                font-size: 18px;
+                font-size: 14px;
                 color: #666;
-                padding: 20px 0;
+                padding: 10px 0;
             }
         """)
-        self.layout.addWidget(self.placeholder_label)
+        self.layout.addWidget(self.status_label)
         
         self.layout.addStretch(1)
         self.setLayout(self.layout)
+
+    def create_calibration_group(self, title, button_text):
+        group = QFrame()
+        group.setStyleSheet("QFrame { background: #f8f8f8; border-radius: 10px; }")
+        layout = QVBoxLayout()
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+        
+        # Title
+        title_label = QLabel(title)
+        title_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat Bold';
+                font-size: 18px;
+                color: #333;
+            }
+        """)
+        layout.addWidget(title_label, alignment=Qt.AlignCenter)
+        
+        # Sensor Reading
+        reading_label = QLabel("Calibrate Distance: -")
+        reading_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat SemiBold';
+                font-size: 16px;
+                color: #555;
+            }
+        """)
+        layout.addWidget(reading_label, alignment=Qt.AlignCenter)
+        
+        # Calibration Button
+        calib_button = QPushButton(button_text)
+        calib_button.setStyleSheet("""
+            QPushButton {
+                background-color: #0066cc;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px;
+                font-family: 'Montserrat Bold';
+                font-size: 16px;
+                min-height: 40px;
+            }
+            QPushButton:hover {
+                background-color: #0055aa;
+            }
+            QPushButton:pressed {
+                background-color: #004488;
+            }
+        """)
+        
+        # Store references to update later
+        if "700" in title:
+            self.calib_700_reading = reading_label
+            self.calib_700_button = calib_button
+            calib_button.clicked.connect(lambda: self.calibrate("700mm"))
+        else:
+            self.calib_600_reading = reading_label
+            self.calib_600_button = calib_button
+            calib_button.clicked.connect(lambda: self.calibrate("600mm"))
+            
+        layout.addWidget(calib_button)
+        
+        group.setLayout(layout)
+        return group
+
+    def setup_serial(self):
+        self.serial_thread = None
+        try:
+            self.serial_thread = SerialReaderThread()
+            self.serial_thread.distance_measured.connect(self.update_calibration_readings)
+            self.serial_thread.error_occurred.connect(self.handle_serial_error)
+            self.serial_thread.start()
+        except Exception as e:
+            self.status_label.setText(f"Serial Error: {str(e)}")
+
+    def update_calibration_readings(self, distance):
+        # Update both calibration sections with live readings
+        self.calib_700_reading.setText(f"Calibrate Distance: {distance} mm")
+        self.calib_600_reading.setText(f"Calibrate Distance: {distance} mm")
+
+    def calibrate(self, wheel_type):
+        try:
+            if self.serial_thread and self.serial_thread.isRunning():
+                # Get the latest reading (you might want to average multiple readings)
+                # For simplicity, we'll use the last displayed value
+                reading_text = self.calib_700_reading.text() if wheel_type == "700mm" else self.calib_600_reading.text()
+                distance = int(reading_text.split(":")[1].strip().split(" ")[0])
+                
+                self.calibration_values[wheel_type] = distance
+                self.status_label.setText(f"{wheel_type} calibrated at {distance} mm")
+                
+                # Save calibration values to file or database
+                self.save_calibration_values()
+            else:
+                self.status_label.setText("Error: Sensor not connected")
+        except Exception as e:
+            self.status_label.setText(f"Calibration error: {str(e)}")
+
+    def save_calibration_values(self):
+        # Here you would save to a file or database
+        # For now we'll just print them
+        print("Calibration values:", self.calibration_values)
+        # Example: Save to a file
+        with open("calibration_values.txt", "w") as f:
+            f.write(f"700mm: {self.calibration_values['700mm']}\n")
+            f.write(f"600mm: {self.calibration_values['600mm']}\n")
+
+    def handle_serial_error(self, error_msg):
+        self.status_label.setText(f"Sensor Error: {error_msg}")
+
+    def closeEvent(self):
+        if self.serial_thread:
+            self.serial_thread.stop()
 
 class App(QMainWindow):
     def __init__(self):
