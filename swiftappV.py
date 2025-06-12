@@ -398,14 +398,6 @@ class SelectionPage(QWidget):
             self.layout.addLayout(vbox)
 
         # START INSPECTION
-        btn_start = QPushButton("START INSPECTION")
-        btn_start.setFixedHeight(60)
-        btn_start.setStyleSheet(btn_inspect.styleSheet().replace('#E60000', '#E60000').replace('INSPECTION','START'))
-        btn_start.clicked.connect(lambda: [self.parent.setSelection(), self.parent.stacked_widget.setCurrentIndex(2)])
-        self.layout.addWidget(btn_start)
-        self.layout.addStretch(1)
-        self.setLayout(self.layout)
-        
         btn_inspect = """
             QPushButton {
                 background-color: #e60000;
@@ -425,6 +417,14 @@ class SelectionPage(QWidget):
                 background-color: #b30000;
             }
         """
+        
+        btn_start = QPushButton("START INSPECTION")
+        btn_start.setFixedHeight(60)
+        btn_start.setStyleSheet(btn_inspect.styleSheet().replace('#E60000', '#E60000').replace('INSPECTION','START'))
+        btn_start.clicked.connect(lambda: [self.parent.setSelection(), self.parent.stacked_widget.setCurrentIndex(2)])
+        self.layout.addWidget(btn_start)
+        self.layout.addStretch(1)
+        self.setLayout(self.layout)
 
         # Connect signals
         self.train_slider.valueChanged.connect(lambda: self.train_value.setText(str(self.train_slider.value())))
