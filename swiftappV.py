@@ -395,7 +395,7 @@ class SelectionPage(QWidget):
         self.logo_label.setAlignment(Qt.AlignCenter)
         logo_pixmap = QPixmap('logo.png')
         if not logo_pixmap.isNull():
-            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(60, Qt.SmoothTransformation))
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(80, Qt.SmoothTransformation))
         self.layout.addWidget(self.logo_label)
         self.layout.addSpacing(5)  # Reduced spacing from 10 to 5 after logo
         
@@ -404,7 +404,7 @@ class SelectionPage(QWidget):
         content_frame.setStyleSheet("QFrame { background: transparent; }")
         content_layout = QVBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(10)
+        content_layout.setSpacing(15)
         
         # Section title
         section_title = QLabel("SELECT INSPECTION DETAILS")
@@ -422,7 +422,7 @@ class SelectionPage(QWidget):
         
         # Train Selection
         self.train_layout = QVBoxLayout()
-        self.train_layout.setSpacing(5)
+        self.train_layout.setSpacing(0)
         self.train_label = QLabel("Train Number")
         self.train_label.setStyleSheet("""
             QLabel {
@@ -469,7 +469,7 @@ class SelectionPage(QWidget):
         
         # Compartment Selection
         self.compartment_layout = QVBoxLayout()
-        self.compartment_layout.setSpacing(5)
+        self.compartment_layout.setSpacing(0)
         self.compartment_label = QLabel("Compartment Number")
         self.compartment_label.setStyleSheet("""
             QLabel {
@@ -494,7 +494,7 @@ class SelectionPage(QWidget):
         
         # Wheel Selection
         self.wheel_layout = QVBoxLayout()
-        self.wheel_layout.setSpacing(5)
+        self.wheel_layout.setSpacing(0)
         self.wheel_label = QLabel("Wheel Number")
         self.wheel_label.setStyleSheet("""
             QLabel {
