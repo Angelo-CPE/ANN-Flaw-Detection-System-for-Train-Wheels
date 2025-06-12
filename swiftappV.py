@@ -83,7 +83,7 @@ class CalibrationSerialThread(QThread):
     measurement_complete = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, port='/dev/ttyACM0', baudrate=115200):
+    def __init__(self, port='/dev/ttyACM0', baudrate=9600):
         super().__init__()
         self._run_flag = True
         self.port = port
@@ -145,7 +145,7 @@ class SerialReaderThread(QThread):
     M_SLOPE = (700.0 - 600.0) / (CAL_700_RAW - CAL_600_RAW)
     B_OFFS = 700.0 - M_SLOPE * CAL_700_RAW
 
-    def __init__(self, port='/dev/ttyACM0', baudrate=115200):
+    def __init__(self, port='/dev/ttyACM0', baudrate=9600):
         super().__init__()
         self._run_flag = True
         self.port = port
