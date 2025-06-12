@@ -128,7 +128,7 @@ class CalibrationSerialThread(QThread):
         self.wait()
 
 class SerialReaderThread(QThread):
-    diameter_measured = pyqtSignal(float)  # Final diameter in mm
+    diameter_measured = pyqtSignal(float)
     measurement_complete = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
@@ -148,11 +148,13 @@ class SerialReaderThread(QThread):
     def __init__(self, port='/dev/ttyACM0', baudrate=9600):
         super().__init__()
         self._run_flag = True
-        self.port = port
-        self.baudrate = baudrate
+        self.port       = port
+        self.baudrate   = baudrate
         self.serial_conn = None
-        
-        # Try to load calibration values from file
+
+        # ←── NEW: how long to collect raw readings
+        self.collection_time = 5.0  
+
         self.load_calibration_values()
     
     def load_calibration_values(self):
@@ -222,32 +224,33 @@ class SerialReaderThread(QThread):
     def run(self):
         try:
             self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=1)
-            time.sleep(2)  # Wait for Arduino to initialize
-            
+            time.sleep(2)  # allow Arduino to wake up
+
             valid_diameters = []
             start_time = time.time()
-            
-            # Collect readings for 2 seconds
-            while time.time() - start_time < 2.0 and self._run_flag:
+
+            # ←── COLLECT for self.collection_time seconds
+            while time.time() - start_time < self.collection_time and self._run_flag:
                 if self.serial_conn.in_waiting > 0:
                     line = self.serial_conn.readline().decode('utf-8').strip()
                     try:
-                        raw_distance = float(line)
-                        if raw_distance > 0:  # Ignore error values
-                            diameter = self.calculate_diameter(raw_distance)
-                            valid_diameters.append(diameter)
-                            self.diameter_measured.emit(diameter)
+                        raw_mm = float(line)                     # treat incoming as raw mm
+                        if raw_mm > 0:
+                            dia = self.calculate_diameter(raw_mm) # apply your formula
+                            valid_diameters.append(dia)
+                            self.diameter_measured.emit(dia)
                     except ValueError:
                         pass
-                time.sleep(0.01)
-                
-            # Calculate median of valid diameters
+                time.sleep(0.005)  # tighter polling, so we catch every 200 ms frame
+
+            # Emit the median of all collected diameters
             if valid_diameters:
-                median_diameter = float(np.median(valid_diameters))
-                self.diameter_measured.emit(median_diameter)
-                
+                median_d = float(np.median(valid_diameters))
+                self.diameter_measured.emit(median_d)
+
         except Exception as e:
             self.error_occurred.emit(str(e))
+
         finally:
             if self.serial_conn and self.serial_conn.is_open:
                 self.serial_conn.close()
