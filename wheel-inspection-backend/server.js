@@ -61,6 +61,7 @@
 
   const userSchema = new mongoose.Schema({
     email: { 
+      isActive: { type: Boolean, default: true },
       type: String, 
       required: true, 
       unique: true,
@@ -522,7 +523,32 @@
   }
 });
 
+//Admin Route (promote/demote)
+app.put('/api/admin/users/:id/deactivate', protect, authorize('admin'), async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(req.params.id, 
+      { isActive: false }, 
+      { new: true }
+    );
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({ success: true, data: user });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
+app.get('/api/admin/users/archived', protect, authorize('admin'), async (req, res) => {
+  try {
+    const users = await User.find({ isActive: false }).select('-password');
+    res.status(200).json({ success: true, data: users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
   // Report Routes (protected)
   app.get('/api/reports', protect, async (req, res) => {
