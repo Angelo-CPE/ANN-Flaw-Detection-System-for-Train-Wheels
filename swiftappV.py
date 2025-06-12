@@ -556,152 +556,75 @@ class InspectionPage(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.setup_ui()
-        self.setup_animations()
 
     def setup_ui(self):
-        self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(10, 10, 10, 10)
-        self.layout.setSpacing(10)
-        
-        # Back Button
-        self.back_button = QPushButton("← Back")
-        self.back_button.setStyleSheet("""
-            QPushButton {
-                background: #f0f0f0;
-                color: #333;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 8px 15px;
-                font-family: 'Montserrat SemiBold';
-                font-size: 14px;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background: #e60000;
-                color: white;
-                border-color: #e60000;
-            }
-            QPushButton:pressed {
-                background: #b30000;
-            }
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(20)
+
+        # Header
+        hdr = QHBoxLayout()
+        back = QPushButton("← Back")
+        back.setFixedHeight(36)
+        back.setStyleSheet("""
+            QPushButton { background: #F0F0F0; color: #333; border: 1px solid #DDD; border-radius: 6px; font-size: 14px; padding: 4px 12px; }
+            QPushButton:hover { background: #E60000; color: #FFF; border-color: #E60000; }
         """)
-        self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
-        self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
+        back.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(1))
+        hdr.addWidget(back)
+        hdr.addStretch(1)
+        log = QLabel()
+        log.setPixmap(QPixmap('logo.png').scaledToHeight(48, Qt.SmoothTransformation))
+        hdr.addWidget(log)
+        layout.addLayout(hdr)
+
+        # Camera
+        cam = QLabel()
+        cam.setStyleSheet("background:black; border-radius:4px;")
+        cam.setMinimumSize(480, 320)
+        cam.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(cam, stretch=1)
+        self.parent.camera_label = cam
+
+        # Selection info
+        self.selection_label = QLabel(alignment=Qt.AlignCenter)
+        self.selection_label.setStyleSheet("font-size:16px; color:#333; font-family:'Montserrat SemiBold';")
+        layout.addWidget(self.selection_label)
+
+        # Status panel (added this missing definition)
+        status_panel = QVBoxLayout()
+        status_panel.setContentsMargins(0, 10, 0, 10)
+        status_panel.setSpacing(5)
         
-        # Camera Panel - Modified to take more space
-        self.camera_panel = QFrame()
-        self.camera_panel.setStyleSheet("QFrame { background: white; border: none; }")
-        self.camera_layout = QVBoxLayout()
-        self.camera_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.camera_label = QLabel()
-        self.camera_label.setAlignment(Qt.AlignCenter)
-        self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.camera_label.setMinimumSize(480, 360)
-        self.camera_label.setStyleSheet("""
-            QLabel {
-                background: black;
-                border: none;
-                margin: 0 auto;
-            }
-        """)
-        
-        self.camera_layout.addWidget(self.camera_label)
-        self.camera_panel.setLayout(self.camera_layout)
-        self.layout.addWidget(self.camera_panel, 70)  # Increased weight to 70
-        
-        # Control Panel
-        self.control_panel = QFrame()
-        self.control_panel.setStyleSheet("QFrame { background: white; border: none; }")
-        self.control_layout = QVBoxLayout()
-        self.control_layout.setContentsMargins(0, 0, 0, 0)
-        self.control_layout.setSpacing(10)
-        
-        # Current Selection
-        self.selection_label = QLabel()
-        self.selection_label.setAlignment(Qt.AlignCenter)
-        self.selection_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat SemiBold';
-                font-size: 16px;
-                color: #333;
-                padding: 5px;
-            }
-        """)
-        self.update_selection_label()
-        self.control_layout.addWidget(self.selection_label)
-        
-        # Status Panel
-        self.status_panel = QFrame()
-        self.status_panel.setStyleSheet("QFrame { background: white; border: none; }")
-        self.status_layout = QVBoxLayout()
-        self.status_layout.setContentsMargins(5, 5, 5, 5)
-        self.status_layout.setSpacing(5)
-        
-        self.status_title = QLabel("INSPECTION STATUS")
-        self.status_title.setAlignment(Qt.AlignCenter)
-        self.status_title.setStyleSheet("""
-            QLabel {
-                color: black;
-                font-family: 'Montserrat Bold';
-                font-size: 18px;
-                padding-bottom: 2px;
-                border-bottom: 1px solid #eee;
-            }
-        """)
-        
-        self.status_indicator = QLabel("READY")
-        self.status_indicator.setAlignment(Qt.AlignCenter)
+        self.status_indicator = QLabel("READY", alignment=Qt.AlignCenter)
         self.status_indicator.setStyleSheet("""
             QLabel {
-                color: black;
                 font-family: 'Montserrat ExtraBold';
-                font-size: 16px;
-                padding-top: 2px;
-                padding-bottom: 0px;
+                font-size: 18px;
+                color: black;
+                padding: 10px 0;
             }
         """)
-
+        status_panel.addWidget(self.status_indicator)
+        
         self.recommendation_indicator = QLabel()
         self.recommendation_indicator.setAlignment(Qt.AlignCenter)
-        self.recommendation_indicator.setStyleSheet("""
-            QLabel {
-                color: #666;
-                font-family: 'Montserrat Regular';
-                font-size: 14px;
-                padding-top: 0px;
-                padding-bottom: 0px;
-            }
-        """)
-
+        self.recommendation_indicator.setStyleSheet("font-size:14px; font-family:'Montserrat Regular'; color:#666;")
+        status_panel.addWidget(self.recommendation_indicator)
+        
         self.diameter_label = QLabel("Wheel Diameter: -")
         self.diameter_label.setAlignment(Qt.AlignCenter)
-        self.diameter_label.setStyleSheet("""
-            QLabel {
-                color: #333;
-                font-family: 'Montserrat Regular';
-                font-size: 14px;
-                padding-top: 0px;
-                padding-bottom: 0px;
-            }
-        """)
+        self.diameter_label.setStyleSheet("font-size:14px; font-family:'Montserrat Regular'; color:#333;")
         self.diameter_label.hide()
+        status_panel.addWidget(self.diameter_label)
         
-        self.status_layout.addWidget(self.status_title)
-        self.status_layout.addWidget(self.status_indicator)
-        self.status_layout.addWidget(self.recommendation_indicator)
-        self.status_layout.addWidget(self.diameter_label)
-        self.status_panel.setLayout(self.status_layout)
-        self.control_layout.addWidget(self.status_panel)
-        
-        # Button Panel - Modified for horizontal layout
-        self.button_panel = QFrame()
-        self.button_panel.setStyleSheet("QFrame { background: white; border: none; }")
-        self.button_layout = QHBoxLayout()  # Changed to QHBoxLayout
-        self.button_layout.setContentsMargins(0, 10, 0, 10)
-        self.button_layout.setSpacing(10)
-        
-        # 1. Detect Flaws Button - Modified to be more square
+        layout.addLayout(status_panel)
+
+        # Button panel
+        button_panel = QHBoxLayout()
+        button_panel.setContentsMargins(0, 10, 0, 10)
+        button_panel.setSpacing(10)
+
         button_style = """
             QPushButton {
                 background-color: %s;
@@ -721,40 +644,33 @@ class InspectionPage(QWidget):
                 color: #ccc;
             }
         """
-        self.detect_btn = QPushButton("DETECT\nFLAWS")  # Added line break
+        
+        self.detect_btn = QPushButton("DETECT\nFLAWS")
         self.detect_btn.setCursor(Qt.PointingHandCursor)
         self.detect_btn.setStyleSheet(button_style % ("#e60000", "#cc0000", "#b30000"))
         
-        # 2. Measure Diameter Button - Modified to be more square
-        self.measure_btn = QPushButton("MEASURE\nDIAMETER")  # Added line break
+        self.measure_btn = QPushButton("MEASURE\nDIAMETER")
         self.measure_btn.setEnabled(False)
         self.measure_btn.setCursor(Qt.PointingHandCursor)
         self.measure_btn.setStyleSheet(button_style % ("#0066cc", "#0055aa", "#004488"))
         
-        # 3. Save Report Button - Modified to be more square
-        self.save_btn = QPushButton("SAVE\nREPORT")  # Added line break
+        self.save_btn = QPushButton("SAVE\nREPORT")
         self.save_btn.setEnabled(False)
         self.save_btn.setVisible(False)
         self.save_btn.setCursor(Qt.PointingHandCursor)
         self.save_btn.setStyleSheet(button_style % ("#FFC107", "#FFB300", "#FFA000"))
         
-        # 4. Reset Button - Modified to be more square
-        self.reset_btn = QPushButton("NEW\nINSPECTION")  # Added line break
+        self.reset_btn = QPushButton("NEW\nINSPECTION")
         self.reset_btn.setVisible(False)
         self.reset_btn.setCursor(Qt.PointingHandCursor)
         self.reset_btn.setStyleSheet(button_style % ("#000000", "#333333", "#222222"))
         
-        self.button_layout.addWidget(self.detect_btn)
-        self.button_layout.addWidget(self.measure_btn)
-        self.button_layout.addWidget(self.save_btn)
-        self.button_layout.addWidget(self.reset_btn)
+        button_panel.addWidget(self.detect_btn)
+        button_panel.addWidget(self.measure_btn)
+        button_panel.addWidget(self.save_btn)
+        button_panel.addWidget(self.reset_btn)
         
-        self.button_panel.setLayout(self.button_layout)
-        self.control_layout.addWidget(self.button_panel)
-        
-        self.control_panel.setLayout(self.control_layout)
-        self.layout.addWidget(self.control_panel, 30)  # Reduced weight to 30
-        self.setLayout(self.layout)
+        layout.addLayout(button_panel)
         
         # Connect signals
         self.detect_btn.clicked.connect(self.parent.detect_flaws)
