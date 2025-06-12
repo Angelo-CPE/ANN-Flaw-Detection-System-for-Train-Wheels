@@ -11,7 +11,7 @@ from scipy.signal import hilbert
 import torch.nn as nn
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
                             QPushButton, QLabel, QWidget, QFrame, QMessageBox, QSizePolicy,
-                            QGridLayout)
+                            QGridLayout, QStackedWidget, QSlider)
 from PyQt5.QtGui import QImage, QPixmap, QFont, QColor, QPainter, QPen, QFontDatabase, QIcon
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve
 
@@ -278,33 +278,183 @@ class CameraThread(QThread):
         self._run_flag = False
         self.wait()
 
-class App(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Wheel Inspection")
-        self.setWindowIcon(QIcon("logo.png"))
-        self.showFullScreen()
-            
-        self.trainNumber = 1
-        self.compartmentNumber = 1
-        self.wheelNumber = 1
-        self.current_distance = 680
-        self.test_image = None
-        self.test_status = None
-        self.test_recommendation = None
+class SelectionPage(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(30, 30, 30, 30)
+        self.layout.setSpacing(20)
         
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        self.central_widget.setStyleSheet("background: white;")
+        # Logo
+        self.logo_label = QLabel()
+        self.logo_label.setAlignment(Qt.AlignCenter)
+        logo_pixmap = QPixmap('logo.png')
+        if not logo_pixmap.isNull():
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(120, Qt.SmoothTransformation))
+        self.layout.addWidget(self.logo_label)
         
-        self.main_layout = QVBoxLayout()
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.setSpacing(0)
-        self.central_widget.setLayout(self.main_layout)
+        # Title
+        self.title_label = QLabel("Wheel Inspection")
+        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat Bold';
+                font-size: 28px;
+                color: #333;
+                padding: 10px 0;
+            }
+        """)
+        self.layout.addWidget(self.title_label)
         
-        self.content_layout = QHBoxLayout()
-        self.content_layout.setContentsMargins(0, 0, 0, 0)
-        self.content_layout.setSpacing(0)
+        # Train Selection
+        self.train_layout = QVBoxLayout()
+        self.train_layout.setSpacing(5)
+        self.train_label = QLabel("Select Train Number")
+        self.train_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat';
+                font-size: 16px;
+                color: #555;
+            }
+        """)
+        self.train_layout.addWidget(self.train_label)
+        
+        self.train_slider = QSlider(Qt.Horizontal)
+        self.train_slider.setRange(1, 20)
+        self.train_slider.setValue(1)
+        self.train_slider.setStyleSheet("""
+            QSlider {
+                height: 40px;
+            }
+            QSlider::groove:horizontal {
+                height: 8px;
+                background: #ddd;
+                border-radius: 4px;
+            }
+            QSlider::handle:horizontal {
+                width: 24px;
+                height: 24px;
+                margin: -8px 0;
+                background: #e60000;
+                border-radius: 12px;
+            }
+        """)
+        self.train_layout.addWidget(self.train_slider)
+        
+        self.train_value = QLabel("1")
+        self.train_value.setAlignment(Qt.AlignCenter)
+        self.train_value.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat Bold';
+                font-size: 20px;
+                color: #333;
+            }
+        """)
+        self.train_layout.addWidget(self.train_value)
+        self.layout.addLayout(self.train_layout)
+        
+        # Compartment Selection
+        self.compartment_layout = QVBoxLayout()
+        self.compartment_layout.setSpacing(5)
+        self.compartment_label = QLabel("Select Compartment Number")
+        self.compartment_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat';
+                font-size: 16px;
+                color: #555;
+            }
+        """)
+        self.compartment_layout.addWidget(self.compartment_label)
+        
+        self.compartment_slider = QSlider(Qt.Horizontal)
+        self.compartment_slider.setRange(1, 8)
+        self.compartment_slider.setValue(1)
+        self.compartment_slider.setStyleSheet(self.train_slider.styleSheet())
+        self.compartment_layout.addWidget(self.compartment_slider)
+        
+        self.compartment_value = QLabel("1")
+        self.compartment_value.setAlignment(Qt.AlignCenter)
+        self.compartment_value.setStyleSheet(self.train_value.styleSheet())
+        self.compartment_layout.addWidget(self.compartment_value)
+        self.layout.addLayout(self.compartment_layout)
+        
+        # Wheel Selection
+        self.wheel_layout = QVBoxLayout()
+        self.wheel_layout.setSpacing(5)
+        self.wheel_label = QLabel("Select Wheel Number")
+        self.wheel_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat';
+                font-size: 16px;
+                color: #555;
+            }
+        """)
+        self.wheel_layout.addWidget(self.wheel_label)
+        
+        self.wheel_slider = QSlider(Qt.Horizontal)
+        self.wheel_slider.setRange(1, 8)
+        self.wheel_slider.setValue(1)
+        self.wheel_slider.setStyleSheet(self.train_slider.styleSheet())
+        self.wheel_layout.addWidget(self.wheel_slider)
+        
+        self.wheel_value = QLabel("1")
+        self.wheel_value.setAlignment(Qt.AlignCenter)
+        self.wheel_value.setStyleSheet(self.train_value.styleSheet())
+        self.wheel_layout.addWidget(self.wheel_value)
+        self.layout.addLayout(self.wheel_layout)
+        
+        # Start Button
+        self.start_button = QPushButton("START INSPECTION")
+        self.start_button.setStyleSheet("""
+            QPushButton {
+                background-color: #e60000;
+                color: white;
+                border: none;
+                border-radius: 10px;
+                padding: 15px;
+                font-family: 'Montserrat Bold';
+                font-size: 18px;
+                margin-top: 20px;
+            }
+            QPushButton:hover {
+                background-color: #cc0000;
+            }
+            QPushButton:pressed {
+                background-color: #b30000;
+            }
+        """)
+        self.start_button.clicked.connect(self.start_inspection)
+        self.layout.addWidget(self.start_button)
+        
+        self.layout.addStretch(1)
+        self.setLayout(self.layout)
+        
+        # Connect signals
+        self.train_slider.valueChanged.connect(lambda: self.train_value.setText(str(self.train_slider.value())))
+        self.compartment_slider.valueChanged.connect(lambda: self.compartment_value.setText(str(self.compartment_slider.value())))
+        self.wheel_slider.valueChanged.connect(lambda: self.wheel_value.setText(str(self.wheel_slider.value())))
+
+    def start_inspection(self):
+        self.parent.trainNumber = self.train_slider.value()
+        self.parent.compartmentNumber = self.compartment_slider.value()
+        self.parent.wheelNumber = self.wheel_slider.value()
+        self.parent.stacked_widget.setCurrentIndex(1)
+
+class InspectionPage(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.setup_ui()
+        self.setup_animations()
+
+    def setup_ui(self):
+        self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(10, 10, 10, 10)
+        self.layout.setSpacing(10)
         
         # Camera Panel
         self.camera_panel = QFrame()
@@ -315,241 +465,48 @@ class App(QMainWindow):
         self.camera_label = QLabel()
         self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.camera_label.setMinimumSize(480, 360)
+        self.camera_label.setMinimumSize(320, 240)
         self.camera_label.setStyleSheet("QLabel { background: black; border: none; }")
         
         self.camera_layout.addWidget(self.camera_label)
-        self.camera_panel.setFixedHeight(480)
-        self.camera_layout.setAlignment(Qt.AlignCenter)
-        self.camera_panel.setFixedSize(480, 360)
-        self.camera_layout.setAlignment(Qt.AlignCenter)
         self.camera_panel.setLayout(self.camera_layout)
+        self.layout.addWidget(self.camera_panel, 60)
         
         # Control Panel
         self.control_panel = QFrame()
         self.control_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.control_layout = QVBoxLayout()
         self.control_layout.setContentsMargins(0, 0, 0, 0)
-        self.control_layout.setSpacing(0)
+        self.control_layout.setSpacing(10)
+        
+        # Current Selection
+        self.selection_label = QLabel()
+        self.selection_label.setAlignment(Qt.AlignCenter)
+        self.selection_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat SemiBold';
+                font-size: 16px;
+                color: #333;
+                padding: 5px;
+            }
+        """)
+        self.update_selection_label()
+        self.control_layout.addWidget(self.selection_label)
         
         # Status Panel
         self.status_panel = QFrame()
         self.status_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.status_layout = QVBoxLayout()
         self.status_layout.setContentsMargins(5, 5, 5, 5)
-        
-        # Logo
-        self.logo_space = QLabel()
-        self.logo_space.setAlignment(Qt.AlignCenter)
-        self.logo_space.setFixedHeight(80)
-        self.logo_space.setStyleSheet("background: transparent;")
-        
-        logo_pixmap = QPixmap('logo.png')
-        if not logo_pixmap.isNull():
-            self.logo_space.setPixmap(logo_pixmap.scaledToHeight(150, Qt.SmoothTransformation))
-        
-        # Number controls
-        self.number_controls = QFrame()
-        self.number_controls.setStyleSheet("QFrame { background: transparent; }")
-        self.number_layout = QGridLayout()
-        self.number_layout.setContentsMargins(0, 0, 0, 0)
-        self.number_layout.setSpacing(5)
-        
-        # Train Number
-        self.train_label = QLabel("Train")
-        self.train_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat SemiBold';
-                font-size: 15px;
-                color: #333;
-                padding-right: 6px;
-            }
-        """)
-        
-        self.train_decrement = QPushButton("-")
-        self.train_decrement.setFixedSize(25, 25)
-        self.train_decrement.setStyleSheet("""
-            QPushButton {
-                background-color: #f7f7f7;
-                border: 1px solid #bbb;
-                font-family: 'Montserrat Bold';
-                font-size: 14px;
-                min-width: 25px;
-                max-width: 25px;
-                height: 25px;
-            }
-            QPushButton:hover { background-color: #e0e0e0; }
-        """)
-        
-        self.trainNumber_label = QLabel("1")
-        self.trainNumber_label.setAlignment(Qt.AlignCenter)
-        self.trainNumber_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat Black';
-                font-size: 16px;
-                color: #111;
-                min-width: 32px;
-                min-height: 25px;
-                background-color: #fff;
-                border: 1px solid #ccc;
-                border-radius: 4px;
-                text-align: center;
-            }
-        """)
-        self.train_increment = QPushButton("+")
-        self.train_increment.setFixedSize(25, 25)
-        self.train_increment.setStyleSheet("""
-            QPushButton {
-                background-color: #f7f7f7;
-                border: 1px solid #bbb;
-                font-family: 'Montserrat Bold';
-                font-size: 14px;
-                min-width: 25px;
-                max-width: 25px;
-                height: 25px;
-            }
-            QPushButton:hover { background-color: #e0e0e0; }
-        """)
-        
-        # Compartment Number
-        self.compartment_label = QLabel("Compartment")
-        self.compartment_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat SemiBold';
-                font-size: 15px;
-                color: #333;
-                padding-right: 6px;
-            }
-        """)
-        
-        self.compartment_decrement = QPushButton("-")
-        self.compartment_decrement.setFixedSize(25, 25)
-        self.compartment_decrement.setStyleSheet("""
-            QPushButton {
-                background-color: #f7f7f7;
-                border: 1px solid #bbb;
-                font-family: 'Montserrat Bold';
-                font-size: 14px;
-                min-width: 25px;
-                max-width: 25px;
-                height: 25px;
-            }
-            QPushButton:hover { background-color: #e0e0e0; }
-        """)
-        
-        self.compartmentNumber_label = QLabel("1")
-        self.compartmentNumber_label.setAlignment(Qt.AlignCenter)
-        self.compartmentNumber_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat Black';
-                font-size: 16px;
-                color: #111;
-                min-width: 32px;
-                min-height: 25px;
-                background-color: #fff;
-                border: 1px solid #ccc;
-                border-radius: 4px;
-                text-align: center;
-            }
-        """)
-        
-        self.compartment_increment = QPushButton("+")
-        self.compartment_increment.setFixedSize(25, 25)
-        self.compartment_increment.setStyleSheet("""
-            QPushButton {
-                background-color: #f7f7f7;
-                border: 1px solid #bbb;
-                font-family: 'Montserrat Bold';
-                font-size: 14px;
-                min-width: 25px;
-                max-width: 25px;
-                height: 25px;
-            }
-            QPushButton:hover { background-color: #e0e0e0; }
-        """)
-        
-        # Wheel Number
-        self.wheel_label = QLabel("Wheel")
-        self.wheel_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat SemiBold';
-                font-size: 15px;
-                color: #333;
-                padding-right: 6px;
-            }
-        """)
-        
-        self.wheel_decrement = QPushButton("-")
-        self.wheel_decrement.setFixedSize(25, 25)
-        self.wheel_decrement.setStyleSheet("""
-            QPushButton {
-                background-color: #f7f7f7;
-                border: 1px solid #bbb;
-                font-family: 'Montserrat Bold';
-                font-size: 14px;
-                min-width: 25px;
-                max-width: 25px;
-                height: 25px;
-            }
-            QPushButton:hover { background-color: #e0e0e0; }
-        """)
-        
-        self.wheelNumber_label = QLabel("1")
-        self.wheelNumber_label.setAlignment(Qt.AlignCenter)
-        self.wheelNumber_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat Black';
-                font-size: 16px;
-                color: #111;
-                min-width: 32px;
-                min-height: 25px;
-                background-color: #fff;
-                border: 1px solid #ccc;
-                border-radius: 4px;
-                text-align: center;
-            }
-        """)
-        
-        self.wheel_increment = QPushButton("+")
-        self.wheel_increment.setFixedSize(25, 25)
-        self.wheel_increment.setStyleSheet("""
-            QPushButton {
-                background-color: #f7f7f7;
-                border: 1px solid #bbb;
-                font-family: 'Montserrat Bold';
-                font-size: 14px;
-                min-width: 25px;
-                max-width: 25px;
-                height: 25px;
-            }
-            QPushButton:hover { background-color: #e0e0e0; }
-        """)
-        
-        # Add to layout
-        self.number_layout.addWidget(self.train_label, 0, 0)
-        self.number_layout.addWidget(self.train_decrement, 0, 1)
-        self.number_layout.addWidget(self.trainNumber_label, 0, 2)
-        self.number_layout.addWidget(self.train_increment, 0, 3)
-        
-        self.number_layout.addWidget(self.compartment_label, 1, 0)
-        self.number_layout.addWidget(self.compartment_decrement, 1, 1)
-        self.number_layout.addWidget(self.compartmentNumber_label, 1, 2)
-        self.number_layout.addWidget(self.compartment_increment, 1, 3)
-        
-        self.number_layout.addWidget(self.wheel_label, 2, 0)
-        self.number_layout.addWidget(self.wheel_decrement, 2, 1)
-        self.number_layout.addWidget(self.wheelNumber_label, 2, 2)
-        self.number_layout.addWidget(self.wheel_increment, 2, 3)
-        
-        self.number_controls.setLayout(self.number_layout)
+        self.status_layout.setSpacing(5)
         
         self.status_title = QLabel("INSPECTION STATUS")
         self.status_title.setAlignment(Qt.AlignCenter)
         self.status_title.setStyleSheet("""
             QLabel {
                 color: black;
-                font-family: 'Montserrat Black';
-                font-size: 20px;
+                font-family: 'Montserrat Bold';
+                font-size: 18px;
                 padding-bottom: 2px;
                 border-bottom: 1px solid #eee;
             }
@@ -561,24 +518,11 @@ class App(QMainWindow):
             QLabel {
                 color: black;
                 font-family: 'Montserrat ExtraBold';
-                font-size: 15px;
+                font-size: 16px;
                 padding-top: 2px;
                 padding-bottom: 0px;
             }
         """)
-
-        self.analyzing_label = QLabel("ANALYZING")
-        self.analyzing_label.setAlignment(Qt.AlignCenter)
-        self.analyzing_label.setStyleSheet("""
-            QLabel {
-                color: black;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 15px;
-                padding-top: 0px;
-                padding-bottom: 0px;
-            }
-        """)
-        self.analyzing_label.hide()
 
         self.recommendation_indicator = QLabel()
         self.recommendation_indicator.setAlignment(Qt.AlignCenter)
@@ -605,21 +549,19 @@ class App(QMainWindow):
         """)
         self.diameter_label.hide()
         
-        self.status_layout.addWidget(self.logo_space)
-        self.status_layout.addWidget(self.number_controls)
         self.status_layout.addWidget(self.status_title)
         self.status_layout.addWidget(self.status_indicator)
-        self.status_layout.addWidget(self.analyzing_label)
         self.status_layout.addWidget(self.recommendation_indicator)
         self.status_layout.addWidget(self.diameter_label)
         self.status_panel.setLayout(self.status_layout)
+        self.control_layout.addWidget(self.status_panel)
         
         # Button Panel
         self.button_panel = QFrame()
         self.button_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.button_layout = QVBoxLayout()
         self.button_layout.setContentsMargins(10, 10, 10, 10)
-        self.button_layout.setSpacing(8)
+        self.button_layout.setSpacing(10)
         
         # 1. Detect Flaws Button
         self.detect_btn = QPushButton("DETECT FLAWS")
@@ -629,10 +571,10 @@ class App(QMainWindow):
                 background-color: #e60000;
                 color: white;
                 border: none;
-                padding: 12px;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 14px;
-                border-radius: 4px;
+                padding: 15px;
+                font-family: 'Montserrat Bold';
+                font-size: 16px;
+                border-radius: 8px;
             }
             QPushButton:hover { background-color: #cc0000; }
             QPushButton:pressed { background-color: #b30000; }
@@ -651,10 +593,10 @@ class App(QMainWindow):
                 background-color: #333;
                 color: white;
                 border: none;
-                padding: 12px;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 14px;
-                border-radius: 4px;
+                padding: 15px;
+                font-family: 'Montserrat Bold';
+                font-size: 16px;
+                border-radius: 8px;
             }
             QPushButton:disabled {
                 background-color: #888;
@@ -674,10 +616,10 @@ class App(QMainWindow):
                 background-color: #006600;
                 color: white;
                 border: none;
-                padding: 12px;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 14px;
-                border-radius: 4px;
+                padding: 15px;
+                font-family: 'Montserrat Bold';
+                font-size: 16px;
+                border-radius: 8px;
             }
             QPushButton:disabled {
                 background-color: #888;
@@ -688,7 +630,7 @@ class App(QMainWindow):
         """)
         
         # 4. Reset Button
-        self.reset_btn = QPushButton("RESET")
+        self.reset_btn = QPushButton("NEW INSPECTION")
         self.reset_btn.setVisible(False)
         self.reset_btn.setCursor(Qt.PointingHandCursor)
         self.reset_btn.setStyleSheet("""
@@ -696,10 +638,10 @@ class App(QMainWindow):
                 background-color: #444;
                 color: white;
                 border: none;
-                padding: 12px;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 14px;
-                border-radius: 4px;
+                padding: 15px;
+                font-family: 'Montserrat Bold';
+                font-size: 16px;
+                border-radius: 8px;
             }
             QPushButton:hover { background-color: #222; }
             QPushButton:pressed { background-color: #111; }
@@ -709,49 +651,73 @@ class App(QMainWindow):
         self.button_layout.addWidget(self.measure_btn)
         self.button_layout.addWidget(self.save_btn)
         self.button_layout.addWidget(self.reset_btn)
-        self.button_layout.addStretch(1)
-        
         self.button_panel.setLayout(self.button_layout)
-        
-        self.control_layout.addWidget(self.status_panel)
         self.control_layout.addWidget(self.button_panel)
-        self.control_panel.setFixedHeight(480)
+        
         self.control_panel.setLayout(self.control_layout)
+        self.layout.addWidget(self.control_panel, 40)
+        self.setLayout(self.layout)
         
-        self.content_layout.addWidget(self.camera_panel, 60)
-        self.content_layout.addWidget(self.control_panel, 40)
-        
-        self.main_layout.addLayout(self.content_layout)
-        
-        self.setup_animations()
-        self.setup_camera_thread()
-        self.connect_signals()
-        self.setup_number_controls()
+        # Connect signals
+        self.detect_btn.clicked.connect(self.parent.detect_flaws)
+        self.measure_btn.clicked.connect(self.parent.measure_diameter)
+        self.save_btn.clicked.connect(self.parent.save_report)
+        self.reset_btn.clicked.connect(self.parent.reset_ui)
 
-    def setup_number_controls(self):
-        self.train_decrement.clicked.connect(lambda: self.update_number('train', -1))
-        self.train_increment.clicked.connect(lambda: self.update_number('train', 1))
-        self.compartment_decrement.clicked.connect(lambda: self.update_number('compartment', -1))
-        self.compartment_increment.clicked.connect(lambda: self.update_number('compartment', 1))
-        self.wheel_decrement.clicked.connect(lambda: self.update_number('wheel', -1))
-        self.wheel_increment.clicked.connect(lambda: self.update_number('wheel', 1))
-
-    def update_number(self, number_type, change):
-        if number_type == 'train':
-            self.trainNumber = max(1, min(20, self.trainNumber + change))
-            self.trainNumber_label.setText(str(self.trainNumber))
-        elif number_type == 'compartment':
-            self.compartmentNumber = max(1, min(8, self.compartmentNumber + change))
-            self.compartmentNumber_label.setText(str(self.compartmentNumber))
-        elif number_type == 'wheel':
-            self.wheelNumber = max(1, min(8, self.wheelNumber + change))
-            self.wheelNumber_label.setText(str(self.wheelNumber))
+    def update_selection_label(self):
+        self.selection_label.setText(
+            f"Train: {self.parent.trainNumber} | "
+            f"Compartment: {self.parent.compartmentNumber} | "
+            f"Wheel: {self.parent.wheelNumber}"
+        )
 
     def setup_animations(self):
         self.status_animation = QPropertyAnimation(self.status_indicator, b"windowOpacity")
         self.status_animation.setDuration(300)
         self.status_animation.setStartValue(0.7)
         self.status_animation.setEndValue(1.0)
+
+class App(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Wheel Inspection")
+        self.setWindowIcon(QIcon("logo.png"))
+        self.showFullScreen()
+            
+        self.trainNumber = 1
+        self.compartmentNumber = 1
+        self.wheelNumber = 1
+        self.current_distance = 680
+        self.test_image = None
+        self.test_status = None
+        self.test_recommendation = None
+        
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.central_widget.setStyleSheet("background: white;")
+        
+        self.main_layout = QVBoxLayout()
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(0)
+        self.central_widget.setLayout(self.main_layout)
+        
+        # Create stacked widget for pages
+        self.stacked_widget = QStackedWidget()
+        self.main_layout.addWidget(self.stacked_widget)
+        
+        # Create pages
+        self.selection_page = SelectionPage(self)
+        self.inspection_page = InspectionPage(self)
+        
+        # Add pages to stacked widget
+        self.stacked_widget.addWidget(self.selection_page)
+        self.stacked_widget.addWidget(self.inspection_page)
+        
+        # Setup camera thread
+        self.setup_camera_thread()
+        
+        # Connect signals
+        self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
 
     def setup_camera_thread(self):
         self.camera_thread = CameraThread()
@@ -762,96 +728,67 @@ class App(QMainWindow):
         self.camera_thread.enable_buttons_signal.connect(self.set_buttons_enabled)
         self.camera_thread.start()
 
-    def update_distance(self, distance):
-        self.current_distance = distance
-        self.diameter_label.setText(f"Wheel Diameter: {distance} mm")
-        self.detect_btn.setVisible(False)
-        self.measure_btn.setVisible(False)
-        self.reset_btn.setVisible(True)
-        self.save_btn.setVisible(True)
-        self.diameter_label.show()
-
-    def connect_signals(self):
-        self.detect_btn.clicked.connect(self.detect_flaws)
-        self.measure_btn.clicked.connect(self.measure_diameter)
-        self.save_btn.clicked.connect(self.save_report)
-        self.reset_btn.clicked.connect(self.reset_ui)
-
-    def set_buttons_enabled(self, enabled):
-        # Only enable measure button if we have a test result
-        if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
-            self.measure_btn.setEnabled(enabled)
-        else:
-            self.measure_btn.setEnabled(False)
-        
-        # Only enable save button if we have both test result and measurement
-        if (hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"] and self.current_distance != 680):
-            self.save_btn.setEnabled(enabled)
-        else:
-            self.save_btn.setEnabled(False)
-
-    def trigger_animation(self):
-        self.status_animation.start()
-
     def update_image(self, qt_image):
-        self.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
-            self.camera_label.width(), self.camera_label.height(),
-            Qt.KeepAspectRatio, Qt.SmoothTransformation
+        self.inspection_page.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
+            self.inspection_page.camera_label.width(), 
+            self.inspection_page.camera_label.height(),
+            Qt.KeepAspectRatio, 
+            Qt.SmoothTransformation
         ))
 
     def update_status(self, status, recommendation):
         if status in ["FLAW DETECTED", "NO FLAW"]:
             if hasattr(self, 'current_distance'):
-                self.diameter_label.setText("Wheel Diameter: Measure Next")
+                self.inspection_page.diameter_label.setText("Wheel Diameter: Measure Next")
             else:
-                self.diameter_label.setText("Wheel Diameter: -")
-            self.diameter_label.show()
+                self.inspection_page.diameter_label.setText("Wheel Diameter: -")
+            self.inspection_page.diameter_label.show()
         else:
-            self.diameter_label.hide()
+            self.inspection_page.diameter_label.hide()
             
-        self.status_indicator.setText(status)
-        self.recommendation_indicator.setText(recommendation)
+        self.inspection_page.status_indicator.setText(status)
+        self.inspection_page.recommendation_indicator.setText(recommendation)
         
         if status == "FLAW DETECTED":
-            self.status_indicator.setStyleSheet("""
+            self.inspection_page.status_indicator.setStyleSheet("""
                 QLabel {
                     color: red;
                     font-family: 'Montserrat ExtraBold';
                     font-size: 18px;
-                    padding: 15px 0;
+                    padding: 10px 0;
                 }
             """)
-            self.camera_label.setStyleSheet("""
+            self.inspection_page.camera_label.setStyleSheet("""
                 QLabel {
                     background: black;
-                    border: 4px solid red;
+                    border: 3px solid red;
                 }
             """)
         elif status == "NO FLAW":
-            self.status_indicator.setStyleSheet("""
+            self.inspection_page.status_indicator.setStyleSheet("""
                 QLabel {
                     color: #00CC00;
                     font-family: 'Montserrat ExtraBold';
                     font-size: 18px;
-                    padding: 15px 0;
+                    padding: 10px 0;
                 }
             """)
-            self.camera_label.setStyleSheet("""
+            self.inspection_page.camera_label.setStyleSheet("""
                 QLabel {
                     background: black;
-                    border: 4px solid #00CC00;
+                    border: 3px solid #00CC00;
                 }
             """)
         else:
-            self.status_indicator.setStyleSheet("""
+            self.inspection_page.status_indicator.setStyleSheet("""
                 QLabel {
                     color: black;
                     font-family: 'Montserrat ExtraBold';
                     font-size: 18px;
-                    padding: 15px 0;
+                    padding: 10px 0;
                 }
             """)
-            self.camera_label.setStyleSheet("""
+            self.inspection_page.camera_label.setStyleSheet("""
                 QLabel {
                     background: black;
                     border: none;
@@ -861,37 +798,37 @@ class App(QMainWindow):
         self.trigger_animation()
 
     def detect_flaws(self):
-        self.status_indicator.setText("ANALYZING...")
-        self.status_indicator.setStyleSheet("""
+        self.inspection_page.status_indicator.setText("ANALYZING...")
+        self.inspection_page.status_indicator.setStyleSheet("""
             QLabel {
                 color: black;
                 font-family: 'Montserrat ExtraBold';
                 font-size: 18px;
-                padding: 15px 0;
+                padding: 10px 0;
             }
         """)
-        self.camera_label.setStyleSheet("""
+        self.inspection_page.camera_label.setStyleSheet("""
             QLabel {
                 background: black;
                 border: none;
             }
         """)
-        self.diameter_label.hide()
+        self.inspection_page.diameter_label.hide()
         
         # Immediately disable the button for visual feedback
-        self.detect_btn.setEnabled(False)
-        self.measure_btn.setEnabled(False)
-        self.save_btn.setEnabled(False)
+        self.inspection_page.detect_btn.setEnabled(False)
+        self.inspection_page.measure_btn.setEnabled(False)
+        self.inspection_page.save_btn.setEnabled(False)
         
         self.camera_thread.start_test()
 
     def measure_diameter(self):
-        self.diameter_label.setText("Measuring...")
-        self.diameter_label.show()
+        self.inspection_page.diameter_label.setText("Measuring...")
+        self.inspection_page.diameter_label.show()
 
-        self.detect_btn.setEnabled(False)
-        self.measure_btn.setEnabled(False)
-        self.save_btn.setEnabled(False)
+        self.inspection_page.detect_btn.setEnabled(False)
+        self.inspection_page.measure_btn.setEnabled(False)
+        self.inspection_page.save_btn.setEnabled(False)
 
         try:
             self.tof = VL53L0X.VL53L0X()
@@ -909,17 +846,26 @@ class App(QMainWindow):
             print(f"Sensor init error: {e}")
             self.on_measurement_error("Sensor init error")
 
+    def update_distance(self, distance):
+        self.current_distance = distance
+        self.inspection_page.diameter_label.setText(f"Wheel Diameter: {distance} mm")
+        self.inspection_page.detect_btn.setVisible(False)
+        self.inspection_page.measure_btn.setVisible(False)
+        self.inspection_page.reset_btn.setVisible(True)
+        self.inspection_page.save_btn.setVisible(True)
+        self.inspection_page.diameter_label.show()
+
     def on_measurement_error(self, error_msg):
         print(f"Measurement error: {error_msg}")
         self.on_measurement_complete()
 
     def on_measurement_complete(self):
         # After measurement, show Reset and Save buttons
-        self.detect_btn.setVisible(False)
-        self.measure_btn.setVisible(False)
-        self.save_btn.setEnabled(True)
-        self.save_btn.setVisible(True)
-        self.reset_btn.setVisible(True)
+        self.inspection_page.detect_btn.setVisible(False)
+        self.inspection_page.measure_btn.setVisible(False)
+        self.inspection_page.save_btn.setEnabled(True)
+        self.inspection_page.save_btn.setVisible(True)
+        self.inspection_page.reset_btn.setVisible(True)
 
     def handle_test_complete(self, image, status, recommendation):
         # Ensure we have a valid image
@@ -935,13 +881,29 @@ class App(QMainWindow):
         # After detection, show:
         # - Detect Flaws (disabled)
         # - Measure Diameter (enabled)
-        self.detect_btn.setEnabled(False)
-        self.detect_btn.setVisible(True)
-        self.measure_btn.setEnabled(True)
-        self.measure_btn.setVisible(True)
-        self.save_btn.setEnabled(False)
-        self.save_btn.setVisible(False)
-        self.reset_btn.setVisible(False)
+        self.inspection_page.detect_btn.setEnabled(False)
+        self.inspection_page.detect_btn.setVisible(True)
+        self.inspection_page.measure_btn.setEnabled(True)
+        self.inspection_page.measure_btn.setVisible(True)
+        self.inspection_page.save_btn.setEnabled(False)
+        self.inspection_page.save_btn.setVisible(False)
+        self.inspection_page.reset_btn.setVisible(False)
+
+    def set_buttons_enabled(self, enabled):
+        # Only enable measure button if we have a test result
+        if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
+            self.inspection_page.measure_btn.setEnabled(enabled)
+        else:
+            self.inspection_page.measure_btn.setEnabled(False)
+        
+        # Only enable save button if we have both test result and measurement
+        if (hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"] and self.current_distance != 680):
+            self.inspection_page.save_btn.setEnabled(enabled)
+        else:
+            self.inspection_page.save_btn.setEnabled(False)
+
+    def trigger_animation(self):
+        self.inspection_page.status_animation.start()
 
     def save_report(self):
         msg = QMessageBox()
@@ -957,19 +919,20 @@ class App(QMainWindow):
             }
             QLabel {
                 color: black;
-                font-size: 14px;
+                font-size: 16px;
             }
             QPushButton {
                 background-color: #006600;
                 color: white;
                 border: none;
-                padding: 8px 16px;
-                font-family: 'Montserrat ExtraBold';
-                font-size: 14px;
-                min-width: 80px;
+                padding: 10px 20px;
+                font-family: 'Montserrat Bold';
+                font-size: 16px;
+                min-width: 100px;
+                border-radius: 5px;
             }
             QPushButton:hover { background-color: #004400; }
-            #qt_msgbox_buttonbox { border-top: 1px solid #ddd; padding-top: 16px; }
+            #qt_msgbox_buttonbox { border-top: 1px solid #ddd; padding-top: 20px; }
         """)
         
         if msg.exec_() == QMessageBox.Save:
@@ -1013,19 +976,20 @@ class App(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Failed to save report: {str(e)}")
 
     def reset_ui(self):
-        self.status_indicator.setText("READY")
-        self.recommendation_indicator.setText("")
-        self.diameter_label.setText("Wheel Diameter: -")
-        self.diameter_label.hide()
-        self.status_indicator.setStyleSheet("""
+        self.stacked_widget.setCurrentIndex(0)
+        self.inspection_page.status_indicator.setText("READY")
+        self.inspection_page.recommendation_indicator.setText("")
+        self.inspection_page.diameter_label.setText("Wheel Diameter: -")
+        self.inspection_page.diameter_label.hide()
+        self.inspection_page.status_indicator.setStyleSheet("""
             QLabel {
                 color: black;
                 font-family: 'Montserrat ExtraBold';
                 font-size: 18px;
-                padding: 15px 0;
+                padding: 10px 0;
             }
         """)
-        self.recommendation_indicator.setStyleSheet("""
+        self.inspection_page.recommendation_indicator.setStyleSheet("""
             QLabel {
                 color: #666;
                 font-family: 'Montserrat';
@@ -1033,7 +997,7 @@ class App(QMainWindow):
                 padding: 10px 0;
             }
         """)
-        self.camera_label.setStyleSheet("""
+        self.inspection_page.camera_label.setStyleSheet("""
             QLabel {
                 background: black;
                 border: none;
@@ -1041,13 +1005,13 @@ class App(QMainWindow):
         """)
         
         # Reset buttons to initial state
-        self.detect_btn.setEnabled(True)
-        self.detect_btn.setVisible(True)
-        self.measure_btn.setEnabled(False)
-        self.measure_btn.setVisible(True)
-        self.save_btn.setEnabled(False)
-        self.save_btn.setVisible(False)
-        self.reset_btn.setVisible(False)
+        self.inspection_page.detect_btn.setEnabled(True)
+        self.inspection_page.detect_btn.setVisible(True)
+        self.inspection_page.measure_btn.setEnabled(False)
+        self.inspection_page.measure_btn.setVisible(True)
+        self.inspection_page.save_btn.setEnabled(False)
+        self.inspection_page.save_btn.setVisible(False)
+        self.inspection_page.reset_btn.setVisible(False)
 
         # Reset data
         self.current_distance = 680
@@ -1070,6 +1034,25 @@ if __name__ == "__main__":
     
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    
+    # Load Montserrat font if available
+    font_db = QFontDatabase()
+    if "Montserrat" not in font_db.families():
+        # Try to load the font from file if not found
+        font_paths = [
+            "Montserrat-Regular.ttf",
+            "fonts/Montserrat-Regular.ttf",
+            "/usr/share/fonts/truetype/montserrat/Montserrat-Regular.ttf"
+        ]
+        for path in font_paths:
+            if os.path.exists(path):
+                font_id = font_db.addApplicationFont(path)
+                if font_id != -1:
+                    break
+    
+    # Set application font
+    font = QFont("Montserrat", 12)
+    app.setFont(font)
     
     palette = app.palette()
     palette.setColor(palette.Window, QColor(255, 255, 255))
