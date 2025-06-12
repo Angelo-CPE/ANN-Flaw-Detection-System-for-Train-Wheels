@@ -526,10 +526,29 @@
 //Admin Route (promote/demote)
 app.put('/api/admin/users/:id/deactivate', protect, authorize('admin'), async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(req.params.id, 
-      { isActive: false }, 
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { isActive: false },
       { new: true }
-    );
+    ).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({ success: true, data: user });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/admin/users/:id/reactivate', protect, authorize('admin'), async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { isActive: true },
+      { new: true }
+    ).select('-password');
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
