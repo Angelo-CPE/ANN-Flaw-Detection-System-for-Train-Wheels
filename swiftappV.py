@@ -375,18 +375,24 @@ class SelectionPage(QWidget):
         
         # Back Button
         self.back_button = QPushButton("← Back")
-        self.back_button.setStyleSheet("""
+        self.back_button.setStyleSheet( """
             QPushButton {
-                background: transparent;
+                background: #f0f0f0;
                 color: #333;
-                border: none;
-                padding: 5px;
-                font-family: 'Montserrat';
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                padding: 8px 15px;
+                font-family: 'Montserrat SemiBold';
                 font-size: 14px;
-                text-align: left;
+                min-width: 80px;
             }
             QPushButton:hover {
-                color: #e60000;
+                background: #e60000;
+                color: white;
+                border-color: #e60000;
+            }
+            QPushButton:pressed {
+                background: #b30000;
             }
         """)
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
@@ -397,21 +403,8 @@ class SelectionPage(QWidget):
         self.logo_label.setAlignment(Qt.AlignCenter)
         logo_pixmap = QPixmap('logo.png')
         if not logo_pixmap.isNull():
-            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(100, Qt.SmoothTransformation))
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(200, Qt.SmoothTransformation))
         self.layout.addWidget(self.logo_label)
-        
-        # Title
-        self.title_label = QLabel("Wheel Inspection")
-        self.title_label.setAlignment(Qt.AlignCenter)
-        self.title_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat Bold';
-                font-size: 24px;
-                color: #333;
-                padding: 10px 0;
-            }
-        """)
-        self.layout.addWidget(self.title_label)
         
         # Train Selection - Modified slider handle size
         self.train_layout = QVBoxLayout()
@@ -561,18 +554,24 @@ class InspectionPage(QWidget):
         
         # Back Button
         self.back_button = QPushButton("← Back")
-        self.back_button.setStyleSheet("""
+        self.back_button.setStyleSheet( """
             QPushButton {
-                background: transparent;
+                background: #f0f0f0;
                 color: #333;
-                border: none;
-                padding: 5px;
-                font-family: 'Montserrat';
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                padding: 8px 15px;
+                font-family: 'Montserrat SemiBold';
                 font-size: 14px;
-                text-align: left;
+                min-width: 80px;
             }
             QPushButton:hover {
-                color: #e60000;
+                background: #e60000;
+                color: white;
+                border-color: #e60000;
+            }
+            QPushButton:pressed {
+                background: #b30000;
             }
         """)
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(1))
@@ -587,8 +586,14 @@ class InspectionPage(QWidget):
         self.camera_label = QLabel()
         self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.camera_label.setMinimumSize(480, 360)  # Increased minimum size
-        self.camera_label.setStyleSheet("QLabel { background: black; border: none; }")
+        self.camera_label.setMinimumSize(480, 360)
+        self.camera_label.setStyleSheet("""
+            QLabel {
+                background: black;
+                border: none;
+                margin: 0 auto;
+            }
+        """)
         
         self.camera_layout.addWidget(self.camera_label)
         self.camera_panel.setLayout(self.camera_layout)
@@ -682,108 +687,56 @@ class InspectionPage(QWidget):
         self.button_panel = QFrame()
         self.button_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.button_layout = QHBoxLayout()  # Changed to QHBoxLayout
-        self.button_layout.setContentsMargins(10, 10, 10, 10)
-        self.button_layout.setSpacing(15)
+        self.button_layout.setContentsMargins(0, 10, 0, 10)
+        self.button_layout.setSpacing(10)
         
         # 1. Detect Flaws Button - Modified to be more square
-        self.detect_btn = QPushButton("DETECT\nFLAWS")  # Added line break
-        self.detect_btn.setCursor(Qt.PointingHandCursor)
-        self.detect_btn.setStyleSheet("""
+        button_style = """
             QPushButton {
-                background-color: #e60000;
+                background-color: %s;
                 color: white;
                 border: none;
-                padding: 20px;
+                padding: 15px 25px;
                 font-family: 'Montserrat Bold';
                 font-size: 18px;
                 border-radius: 8px;
-                min-width: 120px;
-                min-height: 100px;
+                min-width: 140px;
+                min-height: 80px;
             }
-            QPushButton:hover { background-color: #cc0000; }
-            QPushButton:pressed { background-color: #b30000; }
+            QPushButton:hover { background-color: %s; }
+            QPushButton:pressed { background-color: %s; }
             QPushButton:disabled {
                 background-color: #888;
                 color: #ccc;
             }
-        """)
+        """
+        self.detect_btn = QPushButton("DETECT\nFLAWS")  # Added line break
+        self.detect_btn.setCursor(Qt.PointingHandCursor)
+        self.detect_btn.setStyleSheet(button_style % ("#e60000", "#cc0000", "#b30000"))
         
         # 2. Measure Diameter Button - Modified to be more square
         self.measure_btn = QPushButton("MEASURE\nDIAMETER")  # Added line break
         self.measure_btn.setEnabled(False)
         self.measure_btn.setCursor(Qt.PointingHandCursor)
-        self.measure_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #333;
-                color: white;
-                border: none;
-                padding: 20px;
-                font-family: 'Montserrat Bold';
-                font-size: 18px;
-                border-radius: 8px;
-                min-width: 120px;
-                min-height: 100px;
-            }
-            QPushButton:disabled {
-                background-color: #888;
-                color: #ccc;
-            }
-            QPushButton:hover { background-color: #111; }
-            QPushButton:pressed { background-color: #000; }
-        """)
+        self.measure_btn.setStyleSheet(button_style % ("#333", "#111", "#000"))
         
         # 3. Save Report Button - Modified to be more square
         self.save_btn = QPushButton("SAVE\nREPORT")  # Added line break
         self.save_btn.setEnabled(False)
         self.save_btn.setVisible(False)
         self.save_btn.setCursor(Qt.PointingHandCursor)
-        self.save_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #006600;
-                color: white;
-                border: none;
-                padding: 20px;
-                font-family: 'Montserrat Bold';
-                font-size: 18px;
-                border-radius: 8px;
-                min-width: 120px;
-                min-height: 100px;
-            }
-            QPushButton:disabled {
-                background-color: #888;
-                color: #ccc;
-            }
-            QPushButton:hover { background-color: #004400; }
-            QPushButton:pressed { background-color: #002200; }
-        """)
+        self.save_btn.setStyleSheet(button_style % ("#006600", "#004400", "#002200"))
         
         # 4. Reset Button - Modified to be more square
         self.reset_btn = QPushButton("NEW\nINSPECTION")  # Added line break
         self.reset_btn.setVisible(False)
         self.reset_btn.setCursor(Qt.PointingHandCursor)
-        self.reset_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #444;
-                color: white;
-                border: none;
-                padding: 20px;
-                font-family: 'Montserrat Bold';
-                font-size: 18px;
-                border-radius: 8px;
-                min-width: 120px;
-                min-height: 100px;
-            }
-            QPushButton:hover { background-color: #222; }
-            QPushButton:pressed { background-color: #111; }
-        """)
+        self.reset_btn.setStyleSheet(button_style % ("#444", "#222", "#111"))
         
-        # Add stretch to center the buttons
-        self.button_layout.addStretch(1)
         self.button_layout.addWidget(self.detect_btn)
         self.button_layout.addWidget(self.measure_btn)
         self.button_layout.addWidget(self.save_btn)
         self.button_layout.addWidget(self.reset_btn)
-        self.button_layout.addStretch(1)
         
         self.button_panel.setLayout(self.button_layout)
         self.control_layout.addWidget(self.button_panel)
@@ -824,18 +777,24 @@ class CalibrationPage(QWidget):
         
         # Back Button
         self.back_button = QPushButton("← Back")
-        self.back_button.setStyleSheet("""
+        self.back_button.setStyleSheet( """
             QPushButton {
-                background: transparent;
+                background: #f0f0f0;
                 color: #333;
-                border: none;
-                padding: 5px;
-                font-family: 'Montserrat';
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                padding: 8px 15px;
+                font-family: 'Montserrat SemiBold';
                 font-size: 14px;
-                text-align: left;
+                min-width: 80px;
             }
             QPushButton:hover {
-                color: #e60000;
+                background: #e60000;
+                color: white;
+                border-color: #e60000;
+            }
+            QPushButton:pressed {
+                background: #b30000;
             }
         """)
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
@@ -927,8 +886,7 @@ class App(QMainWindow):
 
     def update_image(self, qt_image):
         self.inspection_page.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
-            self.inspection_page.camera_label.width(), 
-            self.inspection_page.camera_label.height(),
+            self.inspection_page.camera_label.size(), 
             Qt.KeepAspectRatio, 
             Qt.SmoothTransformation
         ))
