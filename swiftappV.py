@@ -187,37 +187,37 @@ class SerialReaderThread(QThread):
             self.M_SLOPE = (700.0 - 600.0) / (self.CAL_700_RAW - self.CAL_600_RAW)
             self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
 
-    def calculate_diameter(self, g_raw):
-        """Calculate wheel diameter from raw sensor reading"""
-        # Linearise (mm) - convert raw reading to linear distance
-        g_lin = self.M_SLOPE * g_raw + self.B_OFFS
-        
-        print(f"Raw: {g_raw:.1f} mm, Linearized: {g_lin:.1f} mm")
-        
-        # Calculate true sagitta (d) in meters:
-        # Subtract lift-off distance and account for lever gain
-        # Convert from mm to meters (/1000)
-        d_true_m = (g_lin - self.LIFT_OFF_MM) / (self.LEVER_GAIN * 1000.0)
-        
-        print(f"True sagitta: {d_true_m*1000:.3f} mm")
-        
-        # Circle geometry calculation:
-        # R = (L²)/(8d) + d/2
-        # Where L is chord length (0.25m), d is sagitta
-        if d_true_m <= 0:
-            print("Warning: Negative or zero sagitta - check calibration")
-            return 0
-        
-        R = (self.CHORD_L ** 2) / (8.0 * d_true_m) + d_true_m / 2.0
-        
-        print(f"Calculated radius: {R:.3f} m")
-        
-        # Convert radius to diameter and meters to mm
-        diameter = R * 2000.0  # 2×R and metres→mm
-        
-        print(f"Final diameter: {diameter:.1f} mm")
-        
-        return diameter
+    def calculate_diameter(self, raw_mm):
+        import math
+
+        # 1) helper: what the lever-tip gap *should* be under a known wheel diameter
+        def true_gap(dia_mm):
+            R     = dia_mm / 2.0
+            # sagitta (in mm) for a circle of radius R over a chord of length CHORD_L
+            sag   = R - math.sqrt(R*R - (self.CHORD_L*1000.0/2.0)**2)
+            # lever amplifies sagitta, then add lift-off
+            return sag * self.LEVER_GAIN + self.LIFT_OFF_MM
+
+        # 2) compute the “true” gaps for your two calibration rings
+        gap_700 = true_gap(700.0)
+        gap_600 = true_gap(600.0)
+
+        # 3) build the linear map raw_reading → gap (mm)
+        M = (gap_600 - gap_700) / (self.CAL_600_RAW - self.CAL_700_RAW)
+        B = gap_700 - M * self.CAL_700_RAW
+
+        # 4) map *this* raw to a gap
+        gap_mm = M * raw_mm + B
+
+        # 5) peel off lift-off and lever gain to get the actual sagitta (mm)
+        sag_mm = (gap_mm - self.LIFT_OFF_MM) / self.LEVER_GAIN
+        if sag_mm <= 0:
+            return 0.0
+
+        # 6) circle formula → radius (m) → diameter (mm)
+        d_m = sag_mm / 1000.0
+        R   = (self.CHORD_L**2) / (8.0 * d_m) + d_m / 2.0
+        return R * 2000.0
 
     def run(self):
         try:
