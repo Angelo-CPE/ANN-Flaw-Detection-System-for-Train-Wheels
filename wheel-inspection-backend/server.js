@@ -59,6 +59,26 @@
     process.exit(1);
   });
 
+  // MIGRATION SCRIPT
+  mongoose.connection.once('open', async () => {
+    try {
+      const users = await User.find({ 'email.isActive': { $exists: true } });
+      if (users.length > 0) {
+        console.log('Migrating user isActive fields...');
+        await Promise.all(users.map(async user => {
+          if (user.email.isActive !== undefined) {
+            user.isActive = user.email.isActive;
+            delete user.email.isActive;
+            await user.save();
+          }
+        }));
+        console.log('Migration complete');
+      }
+    } catch (err) {
+      console.error('Migration error:', err);
+    }
+  });
+
   const userSchema = new mongoose.Schema({
     isActive: { type: Boolean, default: true },
     email: { 
