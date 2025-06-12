@@ -597,28 +597,31 @@ class InspectionPage(QWidget):
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
         self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
-        # Main content area
-        self.main_content = QFrame()
-        self.main_content.setStyleSheet("QFrame { background: transparent; }")
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.setSpacing(10)
-        
-        # Camera Panel - Fixed size
+        # Camera Panel - Top section
         self.camera_panel = QFrame()
         self.camera_panel.setStyleSheet("QFrame { background: white; border: 3px solid transparent; }")
-        # you already defined self.camera_label somewhere above, just re‐use it:
+        self.camera_layout = QVBoxLayout()
+        self.camera_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.camera_label = QLabel()
+        self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setMinimumSize(480, 360)
         self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        cam_layout = QVBoxLayout(self.camera_panel)
-        cam_layout.setContentsMargins(0, 0, 0, 0)
-        cam_layout.addWidget(self.camera_label)
-        self.layout.addWidget(self.camera_panel)
+        self.camera_label.setStyleSheet("""
+            QLabel {
+                background: black;
+                border: 3px solid transparent;
+            }
+        """)
         
-        # Control Panel - Fixed width
+        self.camera_layout.addWidget(self.camera_label)
+        self.camera_panel.setLayout(self.camera_layout)
+        self.layout.addWidget(self.camera_panel, stretch=1)  # Camera takes more space
+        
+        # Control Panel - Bottom section
         self.control_panel = QFrame()
         self.control_panel.setStyleSheet("QFrame { background: white; border: none; }")
-        self.control_panel.setFixedWidth(400)  # Fixed width to prevent stretching
-        self.control_layout = QVBoxLayout(self.control_panel)
+        self.control_layout = QVBoxLayout()
         self.control_layout.setContentsMargins(0, 0, 0, 0)
         self.control_layout.setSpacing(10)
         
@@ -699,7 +702,7 @@ class InspectionPage(QWidget):
         self.status_panel.setLayout(self.status_layout)
         self.control_layout.addWidget(self.status_panel)
         
-        # Button Panel - Fixed size with centered buttons
+        # Button Panel - Horizontal layout for buttons
         self.button_panel = QFrame()
         self.button_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.button_layout = QHBoxLayout()
@@ -728,13 +731,6 @@ class InspectionPage(QWidget):
             }
         """
         
-        # Create button container to center buttons
-        self.button_container = QFrame()
-        self.button_container.setStyleSheet("QFrame { background: transparent; }")
-        self.button_container_layout = QHBoxLayout()
-        self.button_container_layout.setContentsMargins(0, 0, 0, 0)
-        self.button_container_layout.setSpacing(10)
-        
         self.detect_btn = QPushButton("DETECT\nFLAWS")
         self.detect_btn.setCursor(Qt.PointingHandCursor)
         self.detect_btn.setStyleSheet(button_style % ("#e60000", "#cc0000", "#b30000"))
@@ -755,21 +751,20 @@ class InspectionPage(QWidget):
         self.reset_btn.setCursor(Qt.PointingHandCursor)
         self.reset_btn.setStyleSheet(button_style % ("#000000", "#333333", "#222222"))
         
-        self.button_container_layout.addWidget(self.detect_btn)
-        self.button_container_layout.addWidget(self.measure_btn)
-        self.button_container_layout.addWidget(self.save_btn)
-        self.button_container_layout.addWidget(self.reset_btn)
-        self.button_container.setLayout(self.button_container_layout)
+        # Center the buttons horizontally
+        self.button_layout.addStretch(1)
+        self.button_layout.addWidget(self.detect_btn)
+        self.button_layout.addWidget(self.measure_btn)
+        self.button_layout.addWidget(self.save_btn)
+        self.button_layout.addWidget(self.reset_btn)
+        self.button_layout.addStretch(1)
         
-        self.button_layout.addWidget(self.button_container)
         self.button_panel.setLayout(self.button_layout)
         self.control_layout.addWidget(self.button_panel)
         
         self.control_panel.setLayout(self.control_layout)
-        self.main_layout.addWidget(self.control_panel, 0, Qt.AlignCenter)
+        self.layout.addWidget(self.control_panel, stretch=0)  # Control panel takes less space
         
-        self.main_content.setLayout(self.main_layout)
-        self.layout.addWidget(self.main_content)
         self.setLayout(self.layout)
         
         # Connect signals
