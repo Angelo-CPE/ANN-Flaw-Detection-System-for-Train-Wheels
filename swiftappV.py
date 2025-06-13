@@ -1115,8 +1115,8 @@ class CalibrationPage(QWidget):
     def on_measurement_complete(self, wheel_type):
         if self.current_reading is not None:
             self.calibration_values[wheel_type] = self.current_reading
-            # Update timestamp with current date and time
-            current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+            # Update timestamp with current date and time in military format
+            current_time = time.strftime("%Y-%m-%d %H:%M")  # Changed to 24-hour format without seconds
             self.calibration_timestamps[wheel_type] = current_time
             
             # Update the timestamp label
