@@ -921,7 +921,9 @@ class CalibrationPage(QWidget):
         self.parent = parent
         self.setup_ui()
         self.calibration_values = {"700mm": None, "600mm": None}
+        self.calibration_timestamps = {"700mm": None, "600mm": None}  # New dictionary for timestamps
         self.current_reading = None
+        self.load_calibration_values()
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
@@ -1027,6 +1029,18 @@ class CalibrationPage(QWidget):
         """)
         layout.addWidget(reading_label, alignment=Qt.AlignCenter)
         
+        # Last Calibration Timestamp (new)
+        timestamp_label = QLabel("Last calibrated: Never")
+        timestamp_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat Regular';
+                font-size: 12px;
+                color: #777;
+                font-style: italic;
+            }
+        """)
+        layout.addWidget(timestamp_label, alignment=Qt.AlignCenter)
+        
         # Calibration Button
         calib_button = QPushButton(button_text)
         calib_button.setStyleSheet("""
@@ -1056,10 +1070,12 @@ class CalibrationPage(QWidget):
         if "700" in title:
             self.calib_700_reading = reading_label
             self.calib_700_button = calib_button
+            self.calib_700_timestamp = timestamp_label  # New reference
             calib_button.clicked.connect(lambda: self.start_measurement("700mm"))
         else:
             self.calib_600_reading = reading_label
             self.calib_600_button = calib_button
+            self.calib_600_timestamp = timestamp_label  # New reference
             calib_button.clicked.connect(lambda: self.start_measurement("600mm"))
             
         layout.addWidget(calib_button)
@@ -1099,6 +1115,16 @@ class CalibrationPage(QWidget):
     def on_measurement_complete(self, wheel_type):
         if self.current_reading is not None:
             self.calibration_values[wheel_type] = self.current_reading
+            # Update timestamp with current date and time
+            current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+            self.calibration_timestamps[wheel_type] = current_time
+            
+            # Update the timestamp label
+            if wheel_type == "700mm":
+                self.calib_700_timestamp.setText(f"Last calibrated: {current_time}")
+            else:
+                self.calib_600_timestamp.setText(f"Last calibrated: {current_time}")
+                
             self.status_label.setText(f"{wheel_type} calibrated at {self.current_reading} mm")
             
             # Update the calibration constants in SerialReaderThread
@@ -1126,20 +1152,56 @@ class CalibrationPage(QWidget):
         self.calib_600_button.setEnabled(True)
 
     def save_calibration_values(self):
-        # Save to file with the new format that includes recalculated constants
+        # Save to file with the new format that includes recalculated constants and timestamps
         print("Calibration values:", self.calibration_values)
         with open("calibration_values.txt", "w") as f:
             f.write(f"700mm: {self.calibration_values['700mm']}\n")
             f.write(f"600mm: {self.calibration_values['600mm']}\n")
             f.write(f"M_SLOPE: {SerialReaderThread.M_SLOPE}\n")
             f.write(f"B_OFFS: {SerialReaderThread.B_OFFS}\n")
+            # Save timestamps if they exist
+            if self.calibration_timestamps['700mm']:
+                f.write(f"700mm_timestamp: {self.calibration_timestamps['700mm']}\n")
+            if self.calibration_timestamps['600mm']:
+                f.write(f"600mm_timestamp: {self.calibration_timestamps['600mm']}\n")
+
+    def load_calibration_values(self):
+        try:
+            if os.path.exists("calibration_values.txt"):
+                with open("calibration_values.txt", "r") as f:
+                    lines = f.readlines()
+                    for line in lines:
+                        if "700mm:" in line and not "timestamp" in line:
+                            self.calibration_values['700mm'] = float(line.split(":")[1].strip())
+                            self.calib_700_reading.setText(f"Distance: {self.calibration_values['700mm']} mm")
+                        elif "600mm:" in line and not "timestamp" in line:
+                            self.calibration_values['600mm'] = float(line.split(":")[1].strip())
+                            self.calib_600_reading.setText(f"Distance: {self.calibration_values['600mm']} mm")
+                        elif "700mm_timestamp:" in line:
+                            self.calibration_timestamps['700mm'] = line.split(":")[1].strip()
+                            self.calib_700_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['700mm']}")
+                        elif "600mm_timestamp:" in line:
+                            self.calibration_timestamps['600mm'] = line.split(":")[1].strip()
+                            self.calib_600_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['600mm']}")
+                        elif "M_SLOPE:" in line:
+                            SerialReaderThread.M_SLOPE = float(line.split(":")[1].strip())
+                        elif "B_OFFS:" in line:
+                            SerialReaderThread.B_OFFS = float(line.split(":")[1].strip())
+        except Exception as e:
+            print(f"Error loading calibration values: {e}")
 
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Wheel Inspection")
         self.setWindowIcon(QIcon("logo.png"))
-        self.showFullScreen()
+        
+        # Add these lines before showing fullscreen
+        self.setMinimumSize(800, 600)  # Set a reasonable minimum size
+        QApplication.processEvents()  # Allow initial layout calculations
+        self.showNormal()  # Show normal first
+        QApplication.processEvents()  # Process any pending events
+        self.showFullScreen()  # Then go fullscreen
             
         self.trainNumber = 1
         self.compartmentNumber = 1
@@ -1179,6 +1241,18 @@ class App(QMainWindow):
         
         # Connect signals
         self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
+
+    def resizeEvent(self, event):
+        # Ensure the layout stays stable during resizing
+        self.stacked_widget.updateGeometry()
+        self.stacked_widget.adjustSize()
+        super().resizeEvent(event)
+
+    def showEvent(self, event):
+        # Ensure proper layout when showing
+        self.stacked_widget.updateGeometry()
+        self.stacked_widget.adjustSize()
+        super().showEvent(event)
 
     def setup_camera_thread(self):
         self.camera_thread = CameraThread()
@@ -1391,6 +1465,12 @@ class App(QMainWindow):
             QPushButton:hover { background-color: #004400; }
             #qt_msgbox_buttonbox { border-top: 1px solid #ddd; padding-top: 20px; }
         """)
+        msg.setWindowModality(Qt.ApplicationModal)
+        msg.setGeometry(
+            self.geometry().x() + self.width()/2 - 250,
+            self.geometry().y() + self.height()/2 - 150,
+            500, 300
+        )
         
         if msg.exec_() == QMessageBox.Save:
             # Check if test_image exists and is valid
