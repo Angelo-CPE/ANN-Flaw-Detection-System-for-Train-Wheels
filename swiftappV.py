@@ -728,7 +728,7 @@ class InspectionPage(QWidget):
         
         # Camera Panel - Top section
         self.camera_panel = QFrame()
-        self.camera_panel.setStyleSheet("QFrame { background: white; border: 3px solid transparent; }")
+        self.camera_panel.setStyleSheet("QFrame { background: white; border: 5px solid transparent; }")
         self.camera_layout = QVBoxLayout()
         self.camera_layout.setContentsMargins(0, 0, 0, 0)
         
@@ -739,7 +739,7 @@ class InspectionPage(QWidget):
         self.camera_label.setStyleSheet("""
             QLabel {
                 background: black;
-                border: 3px solid transparent;
+                border: 5px solid transparent;
             }
         """)
         
@@ -815,8 +815,7 @@ class InspectionPage(QWidget):
         self.diameter_label.setAlignment(Qt.AlignCenter)
         self.diameter_label.setStyleSheet("""
             QLabel {
-                color: #333;
-                font-family: 'Montserrat Regular';
+                font-family: 'Montserrat Bold';
                 font-size: 14px;
                 padding-top: 0px;
                 padding-bottom: 0px;
@@ -1295,7 +1294,7 @@ class App(QMainWindow):
             self.inspection_page.camera_label.setStyleSheet("""
                 QLabel {
                     background: black;
-                    border: 3px solid red;
+                    border: 5px solid red;
                 }
             """)
         elif status == "NO FLAW":
@@ -1310,7 +1309,7 @@ class App(QMainWindow):
             self.inspection_page.camera_label.setStyleSheet("""
                 QLabel {
                     background: black;
-                    border: 3px solid #00CC00;
+                    border: 5px solid #00CC00;
                 }
             """)
         else:
@@ -1325,7 +1324,7 @@ class App(QMainWindow):
             self.inspection_page.camera_label.setStyleSheet("""
                 QLabel {
                     background: black;
-                    border: 3px solid transparent;
+                    border: 5px solid transparent;
                 }
             """)
         
@@ -1344,7 +1343,7 @@ class App(QMainWindow):
         self.inspection_page.camera_label.setStyleSheet("""
             QLabel {
                 background: black;
-                border: 3px solid transparent;
+                border: 5px solid transparent;
             }
         """)
         self.inspection_page.diameter_label.hide()
@@ -1359,7 +1358,22 @@ class App(QMainWindow):
     def update_diameter(self, diameter):
         """Update the UI with the measured diameter"""
         self.current_distance = diameter
-        self.inspection_page.diameter_label.setText(f"Wheel Diameter: {diameter:.1f} mm")
+        diameter_text = f"Wheel Diameter: {diameter:.1f} mm"
+        self.inspection_page.diameter_label.setText(diameter_text)
+        
+        # Set color and font based on diameter value
+        if diameter >= 602:
+            color = "#00CC00"  # Green
+        else:
+            color = "#FF0000"  # Red
+            
+        self.inspection_page.diameter_label.setStyleSheet(f"""
+            QLabel {{
+                color: {color};
+                font-family: 'Montserrat Bold';
+                font-size: 14px;
+            }}
+        """)
         
         # Enable save button if we have both test result and measurement
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
@@ -1538,7 +1552,7 @@ class App(QMainWindow):
         self.inspection_page.camera_label.setStyleSheet("""
             QLabel {
                 background: black;
-                border: 3px solid transparent;
+                border: 5px solid transparent;
             }
         """)
         
