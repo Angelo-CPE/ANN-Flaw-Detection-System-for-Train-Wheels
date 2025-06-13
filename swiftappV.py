@@ -1197,7 +1197,7 @@ class App(QMainWindow):
         self.setWindowIcon(QIcon("logo.png"))
         
         # Add these lines before showing fullscreen
-        self.setMinimumSize(800, 600)  # Set a reasonable minimum size
+        self.setMinimumSize(480, 800)  # Set a reasonable minimum size
         QApplication.processEvents()  # Allow initial layout calculations
         self.showNormal()  # Show normal first
         QApplication.processEvents()  # Process any pending events
