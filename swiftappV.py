@@ -448,10 +448,15 @@ class BatteryThread(QThread):
             voltage = (data[0] << 8) | data[1]
             percent = data[2]
             charging = bool(data[3] & 0x80)
-            return max(0, min(100, percent)), charging
+            
+            # Ensure percentage is within valid range
+            percent = max(0, min(100, percent))
+            
+            return percent, charging
         except Exception as e:
             print(f"Battery read error: {e}")
-            return -1, False  # Indicate error state
+            # Return a default value instead of error state
+            return 100, False
     
     def run(self):
         while self._run_flag:
