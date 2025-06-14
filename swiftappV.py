@@ -439,12 +439,14 @@ class BatteryThread(QThread):
         super().__init__()
         self._run_flag = True
         self.i2c_bus = smbus.SMBus(1)  # Jetson Nano uses bus 1
-        self.UPS_ADDR = 0x52  # WaveShare UPS I2C address
+        self.UPS_ADDR = 0x42  # WaveShare UPS I2C address
         
     def read_battery(self):
         try:
             # Read battery data from UPS
+            print(f"Attempting to read from 0x{self.UPS_ADDR:x}...")
             data = self.i2c_bus.read_i2c_block_data(self.UPS_ADDR, 0, 4)
+            print(f"Raw data: {data}")
             voltage = (data[0] << 8) | data[1]
             percent = data[2]
             charging = bool(data[3] & 0x80)
@@ -454,14 +456,10 @@ class BatteryThread(QThread):
             
             return percent, charging
         except OSError as e:
-            if e.errno == 121:  # Remote I/O error
-                # Simulate battery values
-                return 100, False
-            else:
-                print(f"Battery read error: {e}")
-                return 100, False
+            print(f"I2C Error: {e}")
+            return 100, False  # Fallback values
         except Exception as e:
-            print(f"Battery read error: {e}")
+            print(f"Unexpected error: {e}")
             return 100, False
     
     def run(self):
