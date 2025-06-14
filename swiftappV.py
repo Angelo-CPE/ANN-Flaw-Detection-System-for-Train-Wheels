@@ -524,7 +524,6 @@ class HomePage(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(30, 30, 30, 30)
         self.layout.setSpacing(20)
-        self.layout.addLayout(self.button_layout)
 
         # Add stretch before content to center everything
         self.layout.addStretch(1)
@@ -587,13 +586,14 @@ class HomePage(QWidget):
         
         self.layout.addLayout(self.button_layout)
         
+        # Add stretch after content to center everything
+        self.layout.addStretch(1)
+
         # Add battery indicator placeholder
         self.battery_placeholder = QWidget()
         self.battery_placeholder.setFixedSize(120, 40)
         self.layout.addWidget(self.battery_placeholder, alignment=Qt.AlignRight)
 
-        # Add stretch after content to center everything
-        self.layout.addStretch(1)
         self.setLayout(self.layout)
 
 class SelectionPage(QWidget):
@@ -606,7 +606,6 @@ class SelectionPage(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(20, 5, 20, 15)  # Reduced top and bottom margins
         self.layout.setSpacing(5)   
-        self.layout.addWidget(content_frame, stretch=1)
         
         # Back Button - made more compact
         self.back_button = QPushButton("← Back")
@@ -648,6 +647,8 @@ class SelectionPage(QWidget):
         content_layout.setContentsMargins(10, 5, 10, 5)  # Reduced inner margins
         content_layout.setSpacing(10)  # Reduced spacing
         
+        self.layout.addWidget(content_frame, stretch=1)
+
         # Section title - made more compact
         section_title = QLabel("SELECT INSPECTION DETAILS")
         section_title.setAlignment(Qt.AlignCenter)
@@ -816,6 +817,7 @@ class InspectionPage(QWidget):
         self.parent = parent
         self.setup_ui()
         self.setup_animations()
+        self.update_selection_label()
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
