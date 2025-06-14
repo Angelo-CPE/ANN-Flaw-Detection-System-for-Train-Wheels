@@ -453,9 +453,15 @@ class BatteryThread(QThread):
             percent = max(0, min(100, percent))
             
             return percent, charging
+        except OSError as e:
+            if e.errno == 121:  # Remote I/O error
+                # Simulate battery values
+                return 100, False
+            else:
+                print(f"Battery read error: {e}")
+                return 100, False
         except Exception as e:
             print(f"Battery read error: {e}")
-            # Return a default value instead of error state
             return 100, False
     
     def run(self):
@@ -595,9 +601,8 @@ class HomePage(QWidget):
         self.layout.addStretch(1)
 
         # Add battery indicator placeholder
-        self.battery_placeholder = QWidget()
-        self.battery_placeholder.setFixedSize(120, 40)
-        self.layout.addWidget(self.battery_placeholder, alignment=Qt.AlignRight)
+        if hasattr(self.parent, 'battery_indicator'):
+            self.layout.addWidget(self.parent.battery_indicator, alignment=Qt.AlignRight)
 
         self.setLayout(self.layout)
 
@@ -1334,11 +1339,6 @@ class App(QMainWindow):
         # Create battery indicator
         self.battery_indicator = BatteryIndicator()
         self.battery_indicator.setFixedSize(120, 40)
-        
-        # Create battery thread
-        self.battery_thread = BatteryThread()
-        self.battery_thread.battery_updated.connect(self.battery_indicator.update_status)
-        self.battery_thread.start()
 
         # Create top layout for battery indicator
         self.top_layout = QHBoxLayout()
@@ -1348,7 +1348,6 @@ class App(QMainWindow):
         
         # Create stacked widget for pages
         self.stacked_widget = QStackedWidget()
-        self.main_layout.addWidget(self.stacked_widget)
         
         # Create pages
         self.home_page = HomePage(self)
@@ -1362,9 +1361,8 @@ class App(QMainWindow):
         self.stacked_widget.addWidget(self.inspection_page)   # Index 2
         self.stacked_widget.addWidget(self.calibration_page)  # Index 3
         
-        # Setup camera thread
-        self.setup_camera_thread()
-        
+        self.main_layout.addWidget(self.stacked_widget)
+
         # Add to existing UI setup
         self.top_layout = QHBoxLayout()
         self.top_layout.setContentsMargins(10, 10, 10, 0)
@@ -1377,6 +1375,14 @@ class App(QMainWindow):
         
         # Connect signals
         self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
+
+        # Setup camera thread
+        self.setup_camera_thread()
+
+        # Create battery thread
+        self.battery_thread = BatteryThread()
+        self.battery_thread.battery_updated.connect(self.battery_indicator.update_status)
+        self.battery_thread.start()
 
     def resizeEvent(self, event):
         # Ensure the layout stays stable during resizing
