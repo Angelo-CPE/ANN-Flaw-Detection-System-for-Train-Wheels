@@ -2,6 +2,8 @@ import sys
 import os
 import time
 import cv2
+import threading
+import smbus
 import base64
 import torch
 import numpy as np
@@ -13,7 +15,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
                             QPushButton, QLabel, QWidget, QFrame, QMessageBox, QSizePolicy,
                             QGridLayout, QStackedWidget, QSlider)
 from PyQt5.QtGui import QImage, QPixmap, QFont, QColor, QPainter, QPen, QFontDatabase, QIcon
-from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve
+from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve, QRect
 import serial
 
 def send_report_to_backend(status, recommendation, image_base64, name=None, trainNumber=None, compartmentNumber=None, wheelNumber=None, wheel_diameter=None, token=None):
@@ -430,6 +432,88 @@ class CameraThread(QThread):
         self._run_flag = False
         self.wait()
 
+class BatteryThread(QThread):
+    battery_updated = pyqtSignal(int, bool)  # percent, charging
+    
+    def __init__(self):
+        super().__init__()
+        self._run_flag = True
+        self.i2c_bus = smbus.SMBus(1)  # Jetson Nano uses bus 1
+        self.UPS_ADDR = 0x52  # WaveShare UPS I2C address
+        
+    def read_battery(self):
+        try:
+            # Read battery data from UPS
+            data = self.i2c_bus.read_i2c_block_data(self.UPS_ADDR, 0, 4)
+            voltage = (data[0] << 8) | data[1]
+            percent = data[2]
+            charging = bool(data[3] & 0x80)
+            return max(0, min(100, percent)), charging
+        except Exception as e:
+            print(f"Battery read error: {e}")
+            return -1, False  # Indicate error state
+    
+    def run(self):
+        while self._run_flag:
+            percent, charging = self.read_battery()
+            self.battery_updated.emit(percent, charging)
+            time.sleep(10)  # Update every 10 seconds
+    
+    def stop(self):
+        self._run_flag = False
+        self.wait()
+
+class BatteryIndicator(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(120, 40)
+        self.battery_percent = 100
+        self.is_charging = False
+        self.setStyleSheet("background: transparent;")
+        
+    def update_status(self, percent, charging):
+        self.battery_percent = percent
+        self.is_charging = charging
+        self.update()  # Trigger repaint
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Draw battery outline
+        painter.setPen(QPen(Qt.black, 2))
+        painter.drawRoundedRect(5, 10, 80, 20, 5, 5)
+        painter.drawRect(85, 15, 5, 10)  # Battery tip
+        
+        # Draw charging bolt if charging
+        if self.is_charging:
+            painter.setPen(QPen(QColor(255, 204, 0), 2))  # Yellow bolt
+            bolt_points = [
+                QPoint(55, 15),
+                QPoint(65, 25),
+                QPoint(60, 25),
+                QPoint(65, 35),
+                QPoint(55, 25),
+                QPoint(60, 25)
+            ]
+            painter.drawPolyline(bolt_points)
+        
+        # Fill battery based on percentage
+        fill_width = int(75 * self.battery_percent / 100)
+        if self.battery_percent < 20:
+            fill_color = QColor(255, 50, 50)  # Red
+        elif self.battery_percent < 40:
+            fill_color = QColor(255, 204, 0)  # Yellow
+        else:
+            fill_color = QColor(50, 200, 50)  # Green
+            
+        painter.fillRect(7, 12, fill_width, 16, fill_color)
+        
+        # Draw percentage text
+        painter.setPen(Qt.black)
+        painter.setFont(QFont("Montserrat", 10, QFont.Bold))
+        painter.drawText(QRect(90, 5, 30, 30), Qt.AlignCenter, f"{self.battery_percent}%")
+
 class HomePage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -440,10 +524,11 @@ class HomePage(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(30, 30, 30, 30)
         self.layout.setSpacing(20)
-        
+        self.layout.addLayout(self.button_layout)
+
         # Add stretch before content to center everything
         self.layout.addStretch(1)
-        
+
         # Logo
         self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignCenter)
@@ -502,6 +587,11 @@ class HomePage(QWidget):
         
         self.layout.addLayout(self.button_layout)
         
+        # Add battery indicator placeholder
+        self.battery_placeholder = QWidget()
+        self.battery_placeholder.setFixedSize(120, 40)
+        self.layout.addWidget(self.battery_placeholder, alignment=Qt.AlignRight)
+
         # Add stretch after content to center everything
         self.layout.addStretch(1)
         self.setLayout(self.layout)
@@ -516,6 +606,7 @@ class SelectionPage(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(20, 5, 20, 15)  # Reduced top and bottom margins
         self.layout.setSpacing(5)   
+        self.layout.addWidget(content_frame, stretch=1)
         
         # Back Button - made more compact
         self.back_button = QPushButton("← Back")
@@ -699,6 +790,11 @@ class SelectionPage(QWidget):
         
         content_frame.setLayout(content_layout)
         self.layout.addWidget(content_frame, stretch=1)
+
+        self.battery_placeholder = QWidget()
+        self.battery_placeholder.setFixedSize(120, 40)
+        self.layout.addWidget(self.battery_placeholder, alignment=Qt.AlignRight)
+
         self.setLayout(self.layout)
         
         # Connect signals
@@ -895,6 +991,10 @@ class InspectionPage(QWidget):
         
         self.setLayout(self.layout)
         
+        self.battery_placeholder = QWidget()
+        self.battery_placeholder.setFixedSize(120, 40)
+        self.layout.addWidget(self.battery_placeholder, alignment=Qt.AlignRight)
+        
         # Connect signals
         self.detect_btn.clicked.connect(self.parent.detect_flaws)
         self.measure_btn.clicked.connect(self.parent.measure_diameter)
@@ -997,6 +1097,11 @@ class CalibrationPage(QWidget):
         self.layout.addWidget(self.status_label)
         
         self.layout.addStretch(1)
+
+        self.battery_placeholder = QWidget()
+        self.battery_placeholder.setFixedSize(120, 40)
+        self.layout.addWidget(self.battery_placeholder, alignment=Qt.AlignRight)
+
         self.setLayout(self.layout)
 
     def create_calibration_group(self, title, button_text):
@@ -1218,6 +1323,21 @@ class App(QMainWindow):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
         self.central_widget.setLayout(self.main_layout)
+
+        # Create battery indicator
+        self.battery_indicator = BatteryIndicator()
+        self.battery_indicator.setFixedSize(120, 40)
+        
+        # Create battery thread
+        self.battery_thread = BatteryThread()
+        self.battery_thread.battery_updated.connect(self.battery_indicator.update_status)
+        self.battery_thread.start()
+
+        # Create top layout for battery indicator
+        self.top_layout = QHBoxLayout()
+        self.top_layout.setContentsMargins(10, 10, 10, 0)
+        self.top_layout.addStretch(1)
+        self.top_layout.addWidget(self.battery_indicator)
         
         # Create stacked widget for pages
         self.stacked_widget = QStackedWidget()
@@ -1237,6 +1357,16 @@ class App(QMainWindow):
         
         # Setup camera thread
         self.setup_camera_thread()
+        
+        # Add to existing UI setup
+        self.top_layout = QHBoxLayout()
+        self.top_layout.setContentsMargins(10, 10, 10, 0)
+        self.top_layout.addStretch(1)
+        self.top_layout.addWidget(self.battery_indicator)
+        
+        # Add top layout to main layout
+        self.main_layout.addLayout(self.top_layout)
+        self.main_layout.addWidget(self.stacked_widget)
         
         # Connect signals
         self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
@@ -1578,6 +1708,8 @@ class App(QMainWindow):
         self.camera_thread.stop()
         if hasattr(self, 'sensor_thread'):
             self.sensor_thread.stop()
+        if hasattr(self, 'battery_thread'):
+            self.battery_thread.stop()
         event.accept()
 
 if __name__ == "__main__":
