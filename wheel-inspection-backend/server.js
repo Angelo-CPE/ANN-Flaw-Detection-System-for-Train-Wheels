@@ -370,38 +370,39 @@
       const verificationToken = user.getVerificationToken();
       await user.save();
 
-      const verificationUrl = `https://yourdomain.com/verify-account?token=${verificationToken}`;
+      const verificationUrl = `https://ann-flaw-detection-system-for-train.onrender.com/verify-account?token=${verificationToken}`;
       
       const emailMessage = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0;">
-        <div style="text-align: center; margin-bottom: 20px;">
-          <h2 style="color: #1a1a1a;">Swift Wheel Inspection System</h2>
-          <p style="color: #666;">Official Account Verification</p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <img src="https://ann-flaw-detection-system-for-train.onrender.com/uploads/logo.png" alt="Swift Logo" style="height: 80px; margin-bottom: 10px;" />
+            <h2 style="color: #1a1a1a;">Swift Wheel Inspection System</h2>
+            <p style="color: #666;">Account Verification</p>
+          </div>
+          
+          <p>Dear ${name},</p>
+          
+          <p>Thank you for registering with the <strong>Swift Wheel Inspection System</strong>!</p>
+          
+          <p>To complete your registration and activate your account, please click the verification link below:</p>
+          
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${verificationUrl}" style="background-color: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
+              Verify Account
+            </a>
+          </div>
+          
+          <p>This link will expire in 24 hours. If you did not request this registration, please ignore this email.</p>
+          
+          <p style="margin-top: 30px;">Best regards,<br>
+          <strong>Swift Wheel Inspection System Team</strong><br>
+          Technological Institute of the Philippines</p>
+          
+          <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+            <p>© ${new Date().getFullYear()} Swift Wheel Inspection System. All rights reserved.</p>
+          </div>
         </div>
-        
-        <p>Dear ${name},</p>
-        
-        <p>Thank you for registering with the <strong>Swift Wheel Inspection System</strong>, the official platform for train wheel flaw detection and reporting.</p>
-        
-        <p>To complete your registration and activate your account, please click the verification link below:</p>
-        
-        <div style="text-align: center; margin: 25px 0;">
-          <a href="${verificationUrl}" style="background-color: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
-            Verify Account
-          </a>
-        </div>
-        
-        <p>This link will expire in 24 hours. If you did not request this registration, please ignore this email.</p>
-        
-        <p style="margin-top: 30px;">Best regards,<br>
-        <strong>Swift Wheel Inspection System Team</strong><br>
-        Technological Institute of the Philippines</p>
-        
-        <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
-          <p>© ${new Date().getFullYear()} Swift Wheel Inspection System. All rights reserved.</p>
-        </div>
-      </div>
-    `;
+      `;
 
     await transporter.sendMail({
       to: user.email,
@@ -479,7 +480,7 @@
     await transporter.sendMail({
       to: user.email,
       subject: 'Swift Wheel Inspection System - Verify Your Email',
-      html: `...` // same email template as registration
+      html: emailMessage
     });
 
     res.json({ message: 'Verification email resent' });
@@ -527,33 +528,6 @@
     }
   });
 
-  app.post('/api/auth/forgotpassword', async (req, res) => {
-    const { email } = req.body;
-    try {
-      const user = await User.findOne({ email });
-      if (!user) {
-        return res.status(404).json({ error: 'No user with that email' });
-      }
-
-      const resetToken = user.getResetPasswordToken();
-      await user.save();
-
-      const resetUrl = `https://ann-flaw-detection-system-for-train.onrender.com/resetpassword/${resetToken}`;
-      const message = `You requested a password reset. Use the link to reset your password:\n\n${resetUrl}\n\nIf you did not request this, please ignore this email.`;
-
-      await transporter.sendMail({
-        to: user.email,
-        subject: 'Password Reset Request',
-        text: message
-      });
-
-      res.json({ message: 'Reset link sent to email' });
-    } catch (err) {
-      console.error('Forgot password error:', err);
-      res.status(500).json({ error: 'Email could not be sent' });
-    }
-  });
-
   app.put('/api/auth/resetpassword/:token', async (req, res) => {
     const resetPasswordToken = crypto
       .createHash('sha256')
@@ -597,6 +571,36 @@
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       const otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
 
+      const otpEmail = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <img src="https://ann-flaw-detection-system-for-train.onrender.com/uploads/logo.png" alt="Swift Logo" style="height: 80px; margin-bottom: 10px;" />
+          <h2 style="color: #1a1a1a;">Swift Wheel Inspection System</h2>
+          <p style="color: #666;">Password Reset Request</p>
+        </div>
+
+        <p>Dear ${user.name || 'User'},</p>
+
+        <p>We received a request to reset the password for your <strong>Swift Wheel Inspection System</strong> account.</p>
+
+        <p>Use the OTP (One-Time Password) below to proceed with your password reset:</p>
+
+        <div style="text-align: center; font-size: 24px; font-weight: bold; margin: 30px 0; color: #1a1a1a;">
+          ${otp}
+        </div>
+
+        <p>This OTP is valid for <strong>10 minutes</strong>. If you did not request this, please disregard this email. Your account is still secure.</p>
+
+        <p style="margin-top: 30px;">Best regards,<br>
+        <strong>Swift Wheel Inspection System Team</strong><br>
+        Technological Institute of the Philippines</p>
+
+        <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+          <p>© ${new Date().getFullYear()} Swift Wheel Inspection System. All rights reserved.</p>
+        </div>
+      </div>
+      `;
+
       user.otp = otp;
       user.otpExpiry = otpExpiry;
       await user.save();
@@ -605,7 +609,7 @@
       await transporter.sendMail({
         to: user.email,
         subject: 'Your Password Reset OTP',
-        text: `Your OTP is: ${otp}\n\nValid for 10 minutes.`
+        html: otpMessage
       });
 
       res.json({ message: 'OTP sent successfully' });
@@ -633,11 +637,41 @@
     user.otpExpiry = otpExpiry;
     await user.save();
 
+    const resendOtpEmail = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <img src="https://ann-flaw-detection-system-for-train.onrender.com/uploads/logo.png" alt="Swift Logo" style="height: 80px; margin-bottom: 10px;" />
+          <h2 style="color: #1a1a1a;">Swift Wheel Inspection System</h2>
+          <p style="color: #666;">Your New OTP</p>
+        </div>
+
+        <p>Dear ${user.name || 'User'},</p>
+
+        <p>As requested, we’ve generated a new OTP (One-Time Password) to continue resetting your password for the <strong>Swift Wheel Inspection System</strong>.</p>
+
+        <p>Your new OTP is:</p>
+
+        <div style="text-align: center; font-size: 24px; font-weight: bold; margin: 30px 0; color: #1a1a1a;">
+          ${otp}
+        </div>
+
+        <p>This OTP is valid for <strong>10 minutes</strong>. If you did not request this, you can safely ignore this email.</p>
+
+        <p style="margin-top: 30px;">Best regards,<br>
+        <strong>Swift Wheel Inspection System Team</strong><br>
+        Technological Institute of the Philippines</p>
+
+        <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+          <p>© ${new Date().getFullYear()} Swift Wheel Inspection System. All rights reserved.</p>
+        </div>
+      </div>
+      `;
+
     // Send email
     await transporter.sendMail({
       to: user.email,
       subject: 'Your New Password Reset OTP',
-      text: `Your new OTP is: ${otp}\n\nValid for 10 minutes.`
+      html: resendOtpEmail
     });
 
     res.json({ message: 'New OTP sent successfully' });
