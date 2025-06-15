@@ -1743,7 +1743,7 @@ class App(QMainWindow):
         # Center the message box on screen
         screen_geometry = QApplication.desktop().availableGeometry()
         msg_rect = msg.frameGeometry()
-        x = (screen_geometry.width() - msg_rect.width())
+        x = (screen_geometry.width() - msg_rect.width()) // 4
         y = (screen_geometry.height() - msg_rect.height())
         msg.move(x, y)
         
