@@ -1369,11 +1369,20 @@ class App(QMainWindow):
         self.setWindowTitle("Wheel Inspection")
         self.setWindowIcon(QIcon("logo.png"))
         
-        # Initialize attributes to avoid attribute errors
+        # Initialize attributes first
+        self.trainNumber = 1
+        self.compartmentNumber = 1
+        self.wheelNumber = 1
+        self.current_distance = 0
+        self.test_image = None
+        self.test_status = None
+        self.test_recommendation = None
+        
+        # Initialize UI components to avoid attribute errors
         self.battery_indicator = None
         self.stacked_widget = None
         
-        # Set up UI first
+        # Set up UI
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.central_widget.setStyleSheet("background: white;")
