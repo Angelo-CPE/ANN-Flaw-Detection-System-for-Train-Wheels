@@ -6,12 +6,15 @@ import base64
 import torch
 import numpy as np
 import requests
+import smbus
+from ina219 import INA219
+from ina219 import DeviceRangeError
 from skimage.feature import hog
 from scipy.signal import hilbert
 import torch.nn as nn
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
                             QPushButton, QLabel, QWidget, QFrame, QMessageBox, QSizePolicy,
-                            QGridLayout, QStackedWidget, QSlider)
+                            QGridLayout, QStackedWidget, QSlider, QStyle)
 from PyQt5.QtGui import QImage, QPixmap, QFont, QColor, QPainter, QPen, QFontDatabase, QIcon
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve
 import serial
@@ -77,6 +80,117 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
     finally:
         if os.path.exists(temp_img_path):
             os.remove(temp_img_path)
+
+class BatteryMonitorThread(QThread):
+    battery_updated = pyqtSignal(float, float)  # voltage, percentage
+    
+    def __init__(self):
+        super().__init__()
+        self._run_flag = True
+        self.ina = None
+        
+    def run(self):
+        try:
+            # Jetson Nano uses I2C bus 1 (like Raspberry Pi models 2 and later)
+            bus_number = 1
+            
+            # Initialize INA219 with correct parameters for Jetson Nano
+            self.ina = INA219(
+                shunt_ohms=0.1,
+                max_expected_amps=0.6,
+                address=0x42,
+                busnum=bus_number
+            )
+            self.ina.configure(voltage_range=self.ina.RANGE_16V)
+            
+            print(f"Battery monitor initialized successfully on bus {bus_number}")
+        except Exception as e:
+            print(f"Battery monitor initialization failed: {e}")
+            self.battery_updated.emit(0, 0)
+            return
+        
+        while self._run_flag:
+            try:
+                voltage = self.ina.voltage()
+                # Calculate percentage for 2-cell Li-ion battery
+                # (6.0V = 0%, 8.4V = 100%)
+                percentage = min(100, max(0, (voltage - 6.0) / (8.4 - 6.0) * 100))
+                self.battery_updated.emit(voltage, percentage)
+            except DeviceRangeError as e:
+                print(f"Battery read error: {e}")
+            except Exception as e:
+                print(f"Battery monitor error: {e}")
+            
+            time.sleep(5)  # Update every 5 seconds
+    
+    def stop(self):
+        self._run_flag = False
+        self.wait(2000)
+
+class BatteryIndicator(QWidget):
+    def __init__(self, parent=None, compact=False):
+        super().__init__(parent)
+        self.compact = compact
+        self.voltage = 0.0
+        self.percentage = 0
+        self.setStyleSheet("background: transparent;")
+        
+        # Set size based on whether it's compact mode
+        if compact:
+            self.setFixedSize(50, 25)
+        else:
+            self.setFixedSize(80, 40)
+        
+    def update_battery(self, voltage, percentage):
+        self.voltage = voltage
+        self.percentage = percentage
+        self.update()  # Trigger repaint
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        w = self.width()
+        h = self.height()
+        
+        # Draw battery outline
+        body_width = w * 0.7
+        body_height = h * 0.6
+        tip_width = w * 0.1
+        tip_height = h * 0.3
+        
+        body_x = (w - body_width - tip_width) / 2
+        body_y = (h - body_height) / 2
+        tip_x = body_x + body_width
+        tip_y = body_y + (body_height - tip_height) / 2
+        
+        painter.setPen(QPen(Qt.black, 1))
+        painter.setBrush(Qt.transparent)
+        painter.drawRoundedRect(body_x, body_y, body_width, body_height, 2, 2)
+        painter.drawRect(tip_x, tip_y, tip_width, tip_height)  # Battery tip
+        
+        # Calculate fill width based on percentage
+        fill_width = max(0, min(body_width - 4, (body_width - 4) * self.percentage / 100))
+        
+        # Choose color based on battery level
+        if self.percentage > 60:
+            color = QColor(0, 200, 0)  # Green
+        elif self.percentage > 20:
+            color = QColor(255, 165, 0)  # Orange
+        else:
+            color = QColor(220, 0, 0)  # Red
+        
+        # Draw battery fill
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(color)
+        painter.drawRoundedRect(body_x+2, body_y+2, fill_width, body_height-4, 1, 1)
+        
+        # Draw percentage text only in non-compact mode
+        if not self.compact:
+            painter.setPen(Qt.black)
+            font = QFont("Arial", 8)
+            painter.setFont(font)
+            painter.drawText(0, 0, w, h, Qt.AlignCenter, f"{int(self.percentage)}%")
 
 class CalibrationSerialThread(QThread):
     distance_measured = pyqtSignal(float)  # Raw distance in mm
@@ -561,6 +675,7 @@ class SelectionPage(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(20, 5, 20, 15)  # Reduced top and bottom margins
         self.layout.setSpacing(5)   
+        self.layout.addSpacing(15)
         
         # Back Button - made more compact
         self.back_button = QPushButton("← Back")
@@ -763,6 +878,8 @@ class InspectionPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
+        self.captured_image = None  # Add this to store captured image
+        self.is_captured_mode = False  # Flag for captured image display
         self.setup_ui()
         self.setup_animations()
 
@@ -770,7 +887,8 @@ class InspectionPage(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.layout.setSpacing(10)
-        
+        self.layout.addSpacing(35)
+
         # Camera Panel - Top section
         self.camera_panel = QFrame()
         self.camera_panel.setStyleSheet("QFrame { background: white; border: 5px solid transparent; }")
@@ -787,11 +905,9 @@ class InspectionPage(QWidget):
                 border: 5px solid transparent;
             }
         """)
-        
-        # Add the camera label to the layout (THIS WAS MISSING)
         self.camera_layout.addWidget(self.camera_label)
-
-        # Add real-time status indicator
+        
+        # Add real-time status indicator HERE after camera_label
         self.realtime_status_indicator = QLabel("READY")
         self.realtime_status_indicator.setAlignment(Qt.AlignCenter)
         self.realtime_status_indicator.setStyleSheet("""
@@ -802,7 +918,9 @@ class InspectionPage(QWidget):
                 padding-top: 5px;
             }
         """)
+        self.realtime_status_indicator.setVisible(True)
         self.camera_layout.addWidget(self.realtime_status_indicator, alignment=Qt.AlignBottom | Qt.AlignCenter)
+
         self.camera_panel.setLayout(self.camera_layout)
         self.layout.addWidget(self.camera_panel, stretch=1)  # Camera takes more space
         
@@ -918,7 +1036,7 @@ class InspectionPage(QWidget):
             }
         """
         
-        self.detect_btn = QPushButton("DETECT\nFLAWS")
+        self.detect_btn = QPushButton("CAPTURE\nFLAWS")
         self.detect_btn.setCursor(Qt.PointingHandCursor)
         self.detect_btn.setStyleSheet(button_style % ("#e60000", "#cc0000", "#b30000"))
         
@@ -1254,13 +1372,7 @@ class App(QMainWindow):
         self.setWindowTitle("Wheel Inspection")
         self.setWindowIcon(QIcon("logo.png"))
         
-        # Add these lines before showing fullscreen
-        self.setMinimumSize(480, 800)  # Set a reasonable minimum size
-        QApplication.processEvents()  # Allow initial layout calculations
-        self.showNormal()  # Show normal first
-        QApplication.processEvents()  # Process any pending events
-        self.showFullScreen()  # Then go fullscreen
-            
+        # Initialize attributes first
         self.trainNumber = 1
         self.compartmentNumber = 1
         self.wheelNumber = 1
@@ -1268,7 +1380,13 @@ class App(QMainWindow):
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
+        self.captured_image = None  # Add this to store captured image
         
+        # Initialize UI components to avoid attribute errors
+        self.battery_indicator = None
+        self.stacked_widget = None
+        
+        # Set up UI
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.central_widget.setStyleSheet("background: white;")
@@ -1297,19 +1415,42 @@ class App(QMainWindow):
         # Setup camera thread
         self.setup_camera_thread()
         
+        # Create battery monitor and indicator
+        self.battery_monitor = BatteryMonitorThread()
+        self.battery_indicator = BatteryIndicator()
+        
+        # Add battery indicator to top right corner
+        self.battery_indicator.setParent(self.central_widget)
+        
+        # Now show the window
+        self.setMinimumSize(480, 800)  # Set a reasonable minimum size
+        QApplication.processEvents()  # Allow initial layout calculations
+        self.showNormal()  # Show normal first
+        QApplication.processEvents()  # Process any pending events
+        self.showFullScreen()  # Then go fullscreen
+        
+        # Position battery indicator after window is shown
+        self.battery_indicator.move(self.width() - 100, 10)
+        
         # Connect signals
+        self.battery_monitor.battery_updated.connect(self.battery_indicator.update_battery)
+        self.battery_monitor.start()
         self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
 
     def resizeEvent(self, event):
         # Ensure the layout stays stable during resizing
-        self.stacked_widget.updateGeometry()
-        self.stacked_widget.adjustSize()
+        if self.battery_indicator:
+            self.battery_indicator.move(self.width() - 100, 10)
+        if self.stacked_widget:
+            self.stacked_widget.updateGeometry()
+            self.stacked_widget.adjustSize()
         super().resizeEvent(event)
 
     def showEvent(self, event):
         # Ensure proper layout when showing
-        self.stacked_widget.updateGeometry()
-        self.stacked_widget.adjustSize()
+        if self.stacked_widget:
+            self.stacked_widget.updateGeometry()
+            self.stacked_widget.adjustSize()
         super().showEvent(event)
 
     def setup_camera_thread(self):
@@ -1360,11 +1501,21 @@ class App(QMainWindow):
             """)
 
     def update_image(self, qt_image):
-        self.inspection_page.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
-            self.inspection_page.camera_label.size(), 
-            Qt.KeepAspectRatio, 
-            Qt.SmoothTransformation
-        ))
+        if self.captured_image:
+            # Display captured image if available
+            self.inspection_page.camera_label.setPixmap(
+                QPixmap.fromImage(self.captured_image).scaled(
+                self.inspection_page.camera_label.size(), 
+                Qt.KeepAspectRatio, 
+                Qt.SmoothTransformation
+            ))
+        else:
+            # Otherwise show live feed
+            self.inspection_page.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
+                self.inspection_page.camera_label.size(), 
+                Qt.KeepAspectRatio, 
+                Qt.SmoothTransformation
+            ))
 
     def update_status(self, status, recommendation):
         if status in ["FLAW DETECTED", "NO FLAW"]:
@@ -1452,6 +1603,16 @@ class App(QMainWindow):
         
         self.camera_thread.start_test()
 
+        if self.camera_thread.last_frame is not None:
+            frame = self.camera_thread.last_frame.copy()
+            rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb_image.shape
+            bytes_per_line = ch * w
+            self.captured_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        
+        # Hide the real-time status indicator after capturing
+        self.inspection_page.realtime_status_indicator.hide()
+
     def update_diameter(self, diameter):
         """Update the UI with the measured diameter"""
         self.current_distance = diameter
@@ -1519,6 +1680,7 @@ class App(QMainWindow):
             
         self.test_status = status
         self.test_recommendation = recommendation
+        self.captured_image = None  # Clear captured image flag
 
         # After detection, show:
         # - Detect Flaws (disabled)
@@ -1548,7 +1710,7 @@ class App(QMainWindow):
         self.inspection_page.status_animation.start()
 
     def save_report(self):
-        msg = QMessageBox()
+        msg = QMessageBox(self)
         msg.setWindowTitle("Save Report")
         msg.setText("Save this inspection report?")
         msg.setIcon(QMessageBox.Question)
@@ -1577,10 +1739,14 @@ class App(QMainWindow):
             #qt_msgbox_buttonbox { border-top: 1px solid #ddd; padding-top: 20px; }
         """)
         msg.setWindowModality(Qt.ApplicationModal)
+        
+        # Center the message box on screen
+        msg.setWindowModality(Qt.WindowModal)
         msg.setGeometry(
-            self.geometry().x() + self.width()/2 - 250,
-            self.geometry().y() + self.height()/2 - 150,
-            500, 300
+            self.geometry().center().x() - 150,
+            self.geometry().center().y() - 75,
+            300,
+            150
         )
         
         if msg.exec_() == QMessageBox.Save:
@@ -1667,6 +1833,9 @@ class App(QMainWindow):
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
+        self.captured_image = None
+
+        self.inspection_page.realtime_status_indicator.show()
         
         # Reload the model for next use
         self.camera_thread.load_model()
@@ -1675,6 +1844,7 @@ class App(QMainWindow):
         self.camera_thread.stop()
         if hasattr(self, 'sensor_thread'):
             self.sensor_thread.stop()
+            self.battery_monitor.stop()
         event.accept()
 
 if __name__ == "__main__":
