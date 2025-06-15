@@ -138,6 +138,20 @@
     return resetToken;
   };
 
+  // Method to generate email verification token
+  userSchema.methods.getVerificationToken = function () {
+    const token = crypto.randomBytes(20).toString('hex');
+
+    this.verificationToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+    this.verificationExpire = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+
+    return token;
+  };
+
   const User = mongoose.model('User', userSchema);
 
   // Report Schema and Model
