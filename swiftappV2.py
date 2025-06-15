@@ -877,12 +877,13 @@ class InspectionPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
-        self.setup_ui()
-        self.setup_animations()
 
         # Create compact battery indicator
         self.battery_indicator = BatteryIndicator(compact=True)
         self.battery_indicator.setVisible(False)  # Hide until we have battery data
+
+        self.setup_ui()
+        self.setup_animations()
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
