@@ -283,6 +283,8 @@ class CameraThread(QThread):
     test_complete_signal = pyqtSignal(np.ndarray, str, str)
     animation_signal = pyqtSignal()
     enable_buttons_signal = pyqtSignal(bool)
+    # New signal for real-time classification
+    realtime_classification_signal = pyqtSignal(str, str)
 
     def __init__(self):
         super().__init__()
@@ -291,6 +293,10 @@ class CameraThread(QThread):
         self.model = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.last_frame = None
+        self.last_classification = ("READY", "")  # (status, recommendation)
+        self.classification_timer = QTimer()
+        self.classification_timer.timeout.connect(self.classify_current_frame)
+        self.classification_timer.start(500)  # Classify every 500ms
         self.load_model()
 
     def load_model(self):
@@ -316,65 +322,6 @@ class CameraThread(QThread):
             self.model = None
             torch.cuda.empty_cache()
             print("Model unloaded successfully")
-
-    def preprocess_image(self, frame):
-        try:
-            frame_gray = cv2.cvtColor(cv2.resize(frame, (96, 96)), cv2.COLOR_BGR2GRAY)
-            hog_features = hog(frame_gray, pixels_per_cell=(16, 16), cells_per_block=(1, 1), visualize=False)
-            signal = np.mean(frame_gray, axis=0)
-            analytic_signal = hilbert(signal)
-            amplitude_envelope = np.abs(analytic_signal)
-            combined_features = np.concatenate([hog_features, amplitude_envelope])
-            if len(combined_features) != 2020:
-                combined_features = np.resize(combined_features, 2020)
-            return combined_features
-        except Exception as e:
-            print(f"Error in image preprocessing: {e}")
-            return np.zeros(2019)
-
-    def start_test(self):
-        if self.model is None:
-            self.status_signal.emit("Error", "Model not loaded")
-            return
-            
-        self._testing = True
-        self.enable_buttons_signal.emit(False)
-        self.process_captured_image()
-
-    def process_captured_image(self):
-        if self.last_frame is None or self.model is None:
-            self.status_signal.emit("Error", "No frame captured or model not loaded")
-            self.enable_buttons_signal.emit(True)
-            return
-
-        try:
-            cv2.imwrite("captured_frame.jpg", self.last_frame)
-            features = self.preprocess_image(self.last_frame)
-            features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self.device)
-            
-            with torch.no_grad():
-                outputs = self.model(features_tensor)
-                print("Model Raw Output:", outputs.cpu().numpy())
-                probs = torch.softmax(outputs, dim=1)
-                print("Probabilities:", probs.cpu().numpy())
-                outputs = self.model(features_tensor)
-                _, predicted = torch.max(outputs, 1)
-            
-            if predicted.item() == 1:
-                status = "FLAW DETECTED"
-                recommendation = "For Repair/Replacement"
-            else:
-                status = "NO FLAW"
-                recommendation = "For Constant Monitoring"
-            
-            self.status_signal.emit(status, recommendation)
-            self.test_complete_signal.emit(self.last_frame, status, recommendation)
-            self.animation_signal.emit()
-        except Exception as e:
-            print(f"Error processing image: {e}")
-            self.status_signal.emit("Error", "Processing failed")
-        finally:
-            self.enable_buttons_signal.emit(True)
 
     def preprocess_image(self, frame):
         try:
@@ -419,6 +366,58 @@ class CameraThread(QThread):
         except Exception as e:
             print(f"Error in image preprocessing: {e}")
             return np.zeros(2020)
+
+    def classify_current_frame(self):
+        if self.model is None or self.last_frame is None:
+            return
+            
+        try:
+            features = self.preprocess_image(self.last_frame)
+            features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self.device)
+            
+            with torch.no_grad():
+                outputs = self.model(features_tensor)
+                _, predicted = torch.max(outputs, 1)
+            
+            if predicted.item() == 1:
+                status = "FLAW DETECTED"
+                recommendation = "For Repair/Replacement"
+            else:
+                status = "NO FLAW"
+                recommendation = "For Constant Monitoring"
+            
+            # Update last classification
+            self.last_classification = (status, recommendation)
+            
+            # Emit real-time classification
+            self.realtime_classification_signal.emit(status, recommendation)
+            
+        except Exception as e:
+            print(f"Error in real-time classification: {e}")
+
+    def start_test(self):
+        self._testing = True
+        self.enable_buttons_signal.emit(False)
+        self.process_captured_image()
+
+    def process_captured_image(self):
+        if self.last_frame is None or self.model is None:
+            self.status_signal.emit("Error", "No frame captured or model not loaded")
+            self.enable_buttons_signal.emit(True)
+            return
+
+        try:
+            # Use the last classification result
+            status, recommendation = self.last_classification
+            
+            self.status_signal.emit(status, recommendation)
+            self.test_complete_signal.emit(self.last_frame, status, recommendation)
+            self.animation_signal.emit()
+        except Exception as e:
+            print(f"Error processing image: {e}")
+            self.status_signal.emit("Error", "Processing failed")
+        finally:
+            self.enable_buttons_signal.emit(True)
 
     def run(self):
         # Higher resolution pipeline (1280x720)
@@ -473,6 +472,7 @@ class CameraThread(QThread):
 
     def stop(self):
         self._run_flag = False
+        self.classification_timer.stop()
         self.wait()
 
 class HomePage(QWidget):
@@ -788,7 +788,21 @@ class InspectionPage(QWidget):
             }
         """)
         
+        # Add the camera label to the layout (THIS WAS MISSING)
         self.camera_layout.addWidget(self.camera_label)
+
+        # Add real-time status indicator
+        self.realtime_status_indicator = QLabel("READY")
+        self.realtime_status_indicator.setAlignment(Qt.AlignCenter)
+        self.realtime_status_indicator.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-family: 'Montserrat Regular';
+                font-size: 14px;
+                padding-top: 5px;
+            }
+        """)
+        self.camera_layout.addWidget(self.realtime_status_indicator, alignment=Qt.AlignBottom | Qt.AlignCenter)
         self.camera_panel.setLayout(self.camera_layout)
         self.layout.addWidget(self.camera_panel, stretch=1)  # Camera takes more space
         
@@ -1305,7 +1319,45 @@ class App(QMainWindow):
         self.camera_thread.test_complete_signal.connect(self.handle_test_complete)
         self.camera_thread.animation_signal.connect(self.trigger_animation)
         self.camera_thread.enable_buttons_signal.connect(self.set_buttons_enabled)
+        # Connect real-time classification signal
+        self.camera_thread.realtime_classification_signal.connect(self.update_realtime_status)
         self.camera_thread.start()
+
+    def update_realtime_status(self, status, recommendation):
+        """Update the real-time classification status in the UI"""
+        self.inspection_page.realtime_status_indicator.setText(status)
+        
+        # Update status color based on classification
+        if status == "FLAW DETECTED":
+            self.inspection_page.realtime_status_indicator.setStyleSheet("""
+                QLabel {
+                    color: red;
+                    font-family: 'Montserrat SemiBold';
+                    font-size: 14px;
+                    background-color: rgba(0,0,0,0.5);
+                    padding: 2px 5px;
+                    border-radius: 5px;
+                }
+            """)
+        elif status == "NO FLAW":
+            self.inspection_page.realtime_status_indicator.setStyleSheet("""
+                QLabel {
+                    color: #00CC00;
+                    font-family: 'Montserrat SemiBold';
+                    font-size: 14px;
+                    background-color: rgba(0,0,0,0.5);
+                    padding: 2px 5px;
+                    border-radius: 5px;
+                }
+            """)
+        else:
+            self.inspection_page.realtime_status_indicator.setStyleSheet("""
+                QLabel {
+                    color: #666;
+                    font-family: 'Montserrat Regular';
+                    font-size: 14px;
+                }
+            """)
 
     def update_image(self, qt_image):
         self.inspection_page.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
