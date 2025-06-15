@@ -61,6 +61,9 @@
 
   const userSchema = new mongoose.Schema({
     isActive: { type: Boolean, default: true },
+    isVerified: { type: Boolean, default: false }, 
+    verificationToken: String,
+    verificationExpire: Date,
     email: { 
       type: String, 
       required: true, 
@@ -341,18 +344,68 @@
     }
     
     try {
-      const { email, password, name } = req.body;
+    const { email, password, name } = req.body;
 
-      const existingUser = await User.findOne({ email });
-      if (existingUser) {
-        return res.status(400).json({ success: false, error: 'User already exists' });
-      }
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ success: false, error: 'User already exists' });
+    }
 
-      const user = await User.create({
-        email,
-        password,
-        name
-      });
+    const user = await User.create({
+      email,
+      password,
+      name,
+      isActive: true, 
+      isVerified: false 
+    });
+    
+      const verificationToken = user.getVerificationToken();
+      await user.save();
+
+      const verificationUrl = `https://yourdomain.com/verify-account?token=${verificationToken}`;
+      
+      const emailMessage = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="color: #1a1a1a;">Swift Wheel Inspection System</h2>
+          <p style="color: #666;">Official Account Verification</p>
+        </div>
+        
+        <p>Dear ${name},</p>
+        
+        <p>Thank you for registering with the <strong>Swift Wheel Inspection System</strong>, the official platform for train wheel flaw detection and reporting.</p>
+        
+        <p>To complete your registration and activate your account, please click the verification link below:</p>
+        
+        <div style="text-align: center; margin: 25px 0;">
+          <a href="${verificationUrl}" style="background-color: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
+            Verify Account
+          </a>
+        </div>
+        
+        <p>This link will expire in 24 hours. If you did not request this registration, please ignore this email.</p>
+        
+        <p style="margin-top: 30px;">Best regards,<br>
+        <strong>Swift Wheel Inspection System Team</strong><br>
+        Technological Institute of the Philippines</p>
+        
+        <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+          <p>© ${new Date().getFullYear()} Swift Wheel Inspection System. All rights reserved.</p>
+        </div>
+      </div>
+    `;
+
+    await transporter.sendMail({
+      to: user.email,
+      subject: 'Swift Wheel Inspection System - Account Verification',
+      html: emailMessage
+    });
+
+      
+    res.status(201).json({ 
+      success: true, 
+      message: 'Registration successful. Please check your email to verify your account.' 
+    });
 
       sendTokenResponse(user, 201, res);
     } catch (err) {
@@ -360,37 +413,111 @@
     }
   });
 
+  //Verify Account
+  app.get('/api/auth/verify', async (req, res) => {
+    const { token } = req.query;
+    
+    if (!token) {
+      return res.status(400).json({ error: 'Invalid verification token' });
+    }
+    
+    const verificationToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+    
+    try {
+      const user = await User.findOne({
+        verificationToken,
+        verificationExpire: { $gt: Date.now() }
+      });
+      
+      if (!user) {
+        return res.status(400).json({ error: 'Invalid or expired verification token' });
+      }
+      
+      user.isVerified = true;
+      user.verificationToken = undefined;
+      user.verificationExpire = undefined;
+      
+      await user.save();
+      
+      res.redirect('/verification-success');
+    } catch (err) {
+      res.status(500).json({ error: 'Account verification failed' });
+    }
+  });
+
+  //Resend Verification
+  app.post('/api/auth/resend-verification', async (req, res) => {
+  const { email } = req.body;
+  
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ error: 'Email already verified' });
+    }
+
+    const verificationToken = user.getVerificationToken();
+    await user.save();
+
+    // Send verification email (same as registration)
+    const verificationUrl = `https://ann-flaw-detection-system-for-train.onrender.com/verify-account?token=${verificationToken}`;
+    
+    await transporter.sendMail({
+      to: user.email,
+      subject: 'Swift Wheel Inspection System - Verify Your Email',
+      html: `...` // same email template as registration
+    });
+
+    res.json({ message: 'Verification email resent' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to resend verification email' });
+  }
+});
   app.post('/api/auth/login', [
   body('email').isEmail().withMessage('Please include a valid email'),
   body('password').exists().withMessage('Please include a password')
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-  
-  try {
-    const { email, password } = req.body;
+  ], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
     
-    const user = await User.findOne({ email }).select('+password');
-    if (!user) {
-      return res.status(401).json({ success: false, error: 'Invalid credentials' });
-    }
-    if (!user.isActive) {
-      return res.status(403).json({ error: 'Your account has been deactivated. Please contact the administrator.' });
-    }
+    try {
+      const { email, password } = req.body;
+      
+      const user = await User.findOne({ email }).select('+password');
+      if (!user) {
+        return res.status(401).json({ success: false, error: 'Invalid credentials' });
+      }
 
-    const isMatch = await user.matchPassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ success: false, error: 'Invalid credentials' });
+      if (!user.isActive) {
+        return res.status(403).json({ 
+          error: 'This account has been deactivated by an administrator.' 
+        });
+      }
+
+      if (!user.isVerified) {
+        return res.status(403).json({ 
+          error: 'Please verify your email before logging in.' 
+        });
+      }
+
+      const isMatch = await user.matchPassword(password);
+      if (!isMatch) {
+        return res.status(401).json({ success: false, error: 'Invalid credentials' });
+      }
+      
+      sendTokenResponse(user, 200, res);
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
     }
-    
-    // This sends both token and user info to the client
-    sendTokenResponse(user, 200, res);
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+  });
 
   app.post('/api/auth/forgotpassword', async (req, res) => {
     const { email } = req.body;
@@ -511,6 +638,7 @@
     res.status(500).json({ error: 'Failed to resend OTP' });
   }
 });
+
   // Verify OTP
   app.post('/api/auth/verify-otp', async (req, res) => {
     const { email, otp } = req.body;
