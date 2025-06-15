@@ -14,7 +14,7 @@ from scipy.signal import hilbert
 import torch.nn as nn
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
                             QPushButton, QLabel, QWidget, QFrame, QMessageBox, QSizePolicy,
-                            QGridLayout, QStackedWidget, QSlider)
+                            QGridLayout, QStackedWidget, QSlider, QStyle)
 from PyQt5.QtGui import QImage, QPixmap, QFont, QColor, QPainter, QPen, QFontDatabase, QIcon
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve
 import serial
@@ -1741,11 +1741,14 @@ class App(QMainWindow):
         msg.setWindowModality(Qt.ApplicationModal)
         
         # Center the message box on screen
-        screen_geometry = QApplication.desktop().availableGeometry()
-        msg_rect = msg.frameGeometry()
-        x = (screen_geometry.width() - msg_rect.width()) // 4
-        y = (screen_geometry.height() - msg_rect.height())
-        msg.move(x, y)
+        msg.setGeometry(
+            QStyle.alignedRect(
+                Qt.LeftToRight,
+                Qt.AlignCenter,
+                msg.size(),
+                self.geometry()
+            )
+        )
         
         if msg.exec_() == QMessageBox.Save:
             # Check if test_image exists and is valid
