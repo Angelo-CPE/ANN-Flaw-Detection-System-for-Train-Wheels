@@ -877,10 +877,27 @@ class InspectionPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
-
-        # Create compact battery indicator
-        self.battery_indicator = BatteryIndicator(compact=True)
-        self.battery_indicator.setVisible(False)  # Hide until we have battery data
+        
+        # Create compact battery indicator with percentage text
+        self.battery_container = QWidget()
+        self.battery_layout = QHBoxLayout()
+        self.battery_layout.setContentsMargins(0, 0, 0, 0)
+        self.battery_layout.setSpacing(5)
+        
+        self.battery_icon = BatteryIndicator(compact=True)
+        self.battery_percentage = QLabel("--%")
+        self.battery_percentage.setStyleSheet("""
+            QLabel {
+                color: white;
+                font-family: 'Montserrat Regular';
+                font-size: 14px;
+            }
+        """)
+        
+        self.battery_layout.addWidget(self.battery_icon)
+        self.battery_layout.addWidget(self.battery_percentage)
+        self.battery_container.setLayout(self.battery_layout)
+        self.battery_container.setVisible(False)  # Hide until we have battery data
 
         self.setup_ui()
         self.setup_animations()
@@ -925,7 +942,7 @@ class InspectionPage(QWidget):
             }
         """)
         self.realtime_status_layout.addWidget(self.realtime_status_label)
-        self.realtime_status_layout.addWidget(self.battery_indicator)
+        self.realtime_status_layout.addWidget(self.battery_container)  # Add battery container here
         
         self.realtime_status_container.setLayout(self.realtime_status_layout)
         self.camera_layout.addWidget(self.realtime_status_container, alignment=Qt.AlignBottom | Qt.AlignCenter)
@@ -1408,8 +1425,14 @@ class App(QMainWindow):
         self.stacked_widget = QStackedWidget()
         self.main_layout.addWidget(self.stacked_widget)
 
-        # Initialize battery indicator early
+         # Initialize battery indicator early
         self.battery_indicator = BatteryIndicator()
+        self.battery_indicator.setParent(self.central_widget)
+        self.battery_indicator.move(self.width() - 100, 10)
+
+        # Create stacked widget
+        self.stacked_widget = QStackedWidget()
+        self.main_layout.addWidget(self.stacked_widget)
 
         # Pages
         self.home_page = HomePage(self)
@@ -1421,31 +1444,69 @@ class App(QMainWindow):
         self.stacked_widget.addWidget(self.selection_page)     # Index 1
         self.stacked_widget.addWidget(self.inspection_page)    # Index 2
         self.stacked_widget.addWidget(self.calibration_page)   # Index 3
+        
+        # Connect page change signal
+        self.stacked_widget.currentChanged.connect(self.handle_page_change)
 
         # Camera thread
         self.setup_camera_thread()
 
         # Battery monitor setup
         self.battery_monitor = BatteryMonitorThread()
-        self.battery_indicator.setParent(self.central_widget)
-        self.battery_indicator.move(self.width() - 100, 10)
-        self.battery_monitor.battery_updated.connect(self.battery_indicator.update_battery)
-        self.battery_monitor.battery_updated.connect(self.inspection_page.battery_indicator.update_battery)
-        self.inspection_page.battery_indicator.setVisible(True)
+        self.battery_monitor.battery_updated.connect(self.update_battery_ui)
         self.battery_monitor.start()
-
+        
         self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
 
+        # Position battery indicator after window is shown
+        QTimer.singleShot(100, self.position_battery_indicator)
+
+    def handle_page_change(self, index):
+        """Show/hide top battery indicator based on current page"""
+        if index == 2:  # Inspection page
+            self.battery_indicator.hide()
+        else:
+            self.battery_indicator.show()
+
+    def position_battery_indicator(self):
+        """Position battery indicator after window is visible"""
+        if hasattr(self, 'battery_indicator'):
+            self.battery_indicator.move(self.width() - 100, 10)
+            self.battery_indicator.raise_()
+
     def resizeEvent(self, event):
-        self.battery_indicator.move(self.width() - 100, 10)
-        self.stacked_widget.updateGeometry()
-        self.stacked_widget.adjustSize()
+        if hasattr(self, 'battery_indicator'):
+            self.battery_indicator.move(self.width() - 100, 10)
         super().resizeEvent(event)
 
     def showEvent(self, event):
-        self.stacked_widget.updateGeometry()
-        self.stacked_widget.adjustSize()
+        if hasattr(self, 'stacked_widget'):
+            self.stacked_widget.updateGeometry()
+            self.stacked_widget.adjustSize()
         super().showEvent(event)
+        self.position_battery_indicator()
+        
+    def update_battery_ui(self, voltage, percentage):
+        """Update all battery indicators"""
+        # Update top-right battery indicator
+        self.battery_indicator.update_battery(voltage, percentage)
+        
+        # Update inspection page battery display
+        self.inspection_page.battery_icon.update_battery(voltage, percentage)
+        self.inspection_page.battery_percentage.setText(f"{int(percentage)}%")
+        self.inspection_page.battery_container.setVisible(True)
+        
+        # Update battery container color based on level
+        if percentage > 60:
+            color = "rgba(0,150,0,0.7)"
+        elif percentage > 20:
+            color = "rgba(255,165,0,0.7)"
+        else:
+            color = "rgba(200,0,0,0.7)"
+            
+        self.inspection_page.realtime_status_container.setStyleSheet(
+            f"background: {color}; border-radius: 5px;"
+        )
 
     def setup_camera_thread(self):
         self.camera_thread = CameraThread()
