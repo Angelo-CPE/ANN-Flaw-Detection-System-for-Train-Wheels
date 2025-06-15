@@ -675,6 +675,7 @@ class SelectionPage(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(20, 5, 20, 15)  # Reduced top and bottom margins
         self.layout.setSpacing(5)   
+        self.layout.addSpacing(5)
         
         # Back Button - made more compact
         self.back_button = QPushButton("← Back")
