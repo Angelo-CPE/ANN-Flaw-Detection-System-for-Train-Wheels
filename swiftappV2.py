@@ -88,18 +88,22 @@ class BatteryMonitorThread(QThread):
         super().__init__()
         self._run_flag = True
         self.ina = None
-        self.bus = None
         
     def run(self):
         try:
-            # Create I2C bus explicitly for Raspberry Pi
-            self.bus = smbus.SMBus(1)  # Use bus 1 for Raspberry Pi models 2 and later
+            # Jetson Nano uses I2C bus 1 (like Raspberry Pi models 2 and later)
+            bus_number = 1
             
-            # Initialize INA219 with correct parameters
-            self.ina = INA219(shunt_ohms=0.1, max_expected_amps=0.6, address=0x42, busnum=self.bus)
+            # Initialize INA219 with correct parameters for Jetson Nano
+            self.ina = INA219(
+                shunt_ohms=0.1,
+                max_expected_amps=0.6,
+                address=0x42,
+                busnum=bus_number
+            )
             self.ina.configure(voltage_range=self.ina.RANGE_16V)
             
-            print("Battery monitor initialized successfully")
+            print(f"Battery monitor initialized successfully on bus {bus_number}")
         except Exception as e:
             print(f"Battery monitor initialization failed: {e}")
             self.battery_updated.emit(0, 0)
