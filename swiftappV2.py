@@ -905,22 +905,30 @@ class InspectionPage(QWidget):
                 border: 5px solid transparent;
             }
         """)
-        
-        # Add the camera label to the layout (THIS WAS MISSING)
         self.camera_layout.addWidget(self.camera_label)
 
-        # Add real-time status indicator
-        self.realtime_status_indicator = QLabel("READY")
-        self.realtime_status_indicator.setAlignment(Qt.AlignCenter)
-        self.realtime_status_indicator.setStyleSheet("""
+        # Create container for real-time status and battery
+        self.realtime_status_container = QWidget()
+        self.realtime_status_container.setStyleSheet("background: rgba(0,0,0,0.5); border-radius: 5px;")
+        self.realtime_status_layout = QHBoxLayout()
+        self.realtime_status_layout.setContentsMargins(5, 2, 5, 2)
+        self.realtime_status_layout.setSpacing(10)
+        
+        # Real-time status label
+        self.realtime_status_label = QLabel("READY")
+        self.realtime_status_label.setStyleSheet("""
             QLabel {
                 color: #666;
                 font-family: 'Montserrat Regular';
                 font-size: 14px;
-                padding-top: 5px;
             }
         """)
-        self.camera_layout.addWidget(self.realtime_status_indicator, alignment=Qt.AlignBottom | Qt.AlignCenter)
+        self.realtime_status_layout.addWidget(self.realtime_status_label)
+        self.realtime_status_layout.addWidget(self.battery_indicator)
+        
+        self.realtime_status_container.setLayout(self.realtime_status_layout)
+        self.camera_layout.addWidget(self.realtime_status_container, alignment=Qt.AlignBottom | Qt.AlignCenter)
+        
         self.camera_panel.setLayout(self.camera_layout)
         self.layout.addWidget(self.camera_panel, stretch=1)  # Camera takes more space
         
@@ -1000,36 +1008,12 @@ class InspectionPage(QWidget):
         """)
         self.diameter_label.hide()
         
-         # Add real-time status indicator with battery
-        self.status_container = QWidget()
-        self.status_container.setStyleSheet("background: rgba(0,0,0,0.5); border-radius: 5px;")
-        self.status_layout = QHBoxLayout()
-        self.status_layout.setContentsMargins(5, 2, 5, 2)
-        self.status_layout.setSpacing(10)
-        
-        self.realtime_status_indicator = QLabel("READY")
-        self.realtime_status_indicator.setAlignment(Qt.AlignCenter)
-        self.realtime_status_indicator.setStyleSheet("""
-            QLabel {
-                color: #666;
-                font-family: 'Montserrat Regular';
-                font-size: 14px;
-            }
-        """)
-
         self.status_layout.addWidget(self.status_title)
         self.status_layout.addWidget(self.status_indicator)
         self.status_layout.addWidget(self.recommendation_indicator)
         self.status_layout.addWidget(self.diameter_label)
         self.status_panel.setLayout(self.status_layout)
         self.control_layout.addWidget(self.status_panel)
-
-        # Add battery indicator to the status layout
-        self.status_layout.addWidget(self.realtime_status_indicator)
-        self.status_layout.addWidget(self.battery_indicator)
-        
-        self.status_container.setLayout(self.status_layout)
-        self.camera_layout.addWidget(self.status_container, alignment=Qt.AlignBottom | Qt.AlignCenter)
         
         # Button Panel - Horizontal layout for buttons
         self.button_panel = QFrame()
@@ -1482,12 +1466,12 @@ class App(QMainWindow):
 
     def update_realtime_status(self, status, recommendation):
         """Update the real-time classification status in the UI"""
-        self.realtime_status_indicator.setText(status)
+        self.inspection_page.realtime_status_label.setText(status)
         
         # Update status color based on classification
         if status == "FLAW DETECTED":
-            self.status_container.setStyleSheet("background: rgba(150,0,0,0.7); border-radius: 5px;")
-            self.realtime_status_indicator.setStyleSheet("""
+            self.inspection_page.realtime_status_container.setStyleSheet("background: rgba(150,0,0,0.7); border-radius: 5px;")
+            self.inspection_page.realtime_status_label.setStyleSheet("""
                 QLabel {
                     color: white;
                     font-family: 'Montserrat SemiBold';
@@ -1495,8 +1479,8 @@ class App(QMainWindow):
                 }
             """)
         elif status == "NO FLAW":
-            self.status_container.setStyleSheet("background: rgba(0,100,0,0.7); border-radius: 5px;")
-            self.realtime_status_indicator.setStyleSheet("""
+            self.inspection_page.realtime_status_container.setStyleSheet("background: rgba(0,100,0,0.7); border-radius: 5px;")
+            self.inspection_page.realtime_status_label.setStyleSheet("""
                 QLabel {
                     color: white;
                     font-family: 'Montserrat SemiBold';
@@ -1504,14 +1488,15 @@ class App(QMainWindow):
                 }
             """)
         else:
-            self.status_container.setStyleSheet("background: rgba(0,0,0,0.5); border-radius: 5px;")
-            self.realtime_status_indicator.setStyleSheet("""
+            self.inspection_page.realtime_status_container.setStyleSheet("background: rgba(0,0,0,0.5); border-radius: 5px;")
+            self.inspection_page.realtime_status_label.setStyleSheet("""
                 QLabel {
                     color: #666;
                     font-family: 'Montserrat Regular';
                     font-size: 14px;
                 }
             """)
+
     def update_image(self, qt_image):
         self.inspection_page.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
             self.inspection_page.camera_label.size(), 
