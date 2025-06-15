@@ -6,6 +6,8 @@ import base64
 import torch
 import numpy as np
 import requests
+from ina219 import INA219
+from ina219 import DeviceRangeError
 from skimage.feature import hog
 from scipy.signal import hilbert
 import torch.nn as nn
@@ -77,6 +79,90 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
     finally:
         if os.path.exists(temp_img_path):
             os.remove(temp_img_path)
+
+class BatteryMonitorThread(QThread):
+    battery_updated = pyqtSignal(float, float)  # voltage, percentage
+    
+    def __init__(self):
+        super().__init__()
+        self._run_flag = True
+        self.ina = None
+        
+    def run(self):
+        try:
+            # Initialize INA219 with correct parameters
+            self.ina = INA219(shunt_ohms=0.1, max_expected_amps=0.6, address=0x42)
+            self.ina.configure(voltage_range=self.ina.RANGE_16V)
+        except Exception as e:
+            print(f"Battery monitor initialization failed: {e}")
+            self.battery_updated.emit(0, 0)
+            return
+        
+        while self._run_flag:
+            try:
+                voltage = self.ina.voltage()
+                # Calculate percentage (simplified - adjust based on your battery specs)
+                percentage = min(100, max(0, (voltage - 6.0) / (8.4 - 6.0) * 100))
+                self.battery_updated.emit(voltage, percentage)
+            except DeviceRangeError as e:
+                print(f"Battery read error: {e}")
+            except Exception as e:
+                print(f"Battery monitor error: {e}")
+            
+            time.sleep(5)  # Update every 5 seconds
+    
+    def stop(self):
+        self._run_flag = False
+        self.wait(2000)
+
+# Add this new widget class for the battery indicator
+class BatteryIndicator(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(80, 30)
+        self.voltage = 0.0
+        self.percentage = 0
+        self.setStyleSheet("background: transparent;")
+        
+    def update_battery(self, voltage, percentage):
+        self.voltage = voltage
+        self.percentage = percentage
+        self.update()  # Trigger repaint
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Draw battery outline
+        painter.setPen(QPen(Qt.black, 2))
+        painter.setBrush(Qt.transparent)
+        painter.drawRoundedRect(5, 5, 60, 20, 3, 3)
+        painter.drawRect(65, 10, 5, 10)  # Battery tip
+        
+        # Calculate fill width based on percentage
+        fill_width = max(0, min(58, int(58 * self.percentage / 100)))
+        
+        # Choose color based on battery level
+        if self.percentage > 60:
+            color = QColor(0, 200, 0)  # Green
+        elif self.percentage > 20:
+            color = QColor(255, 165, 0)  # Orange
+        else:
+            color = QColor(220, 0, 0)  # Red
+        
+        # Draw battery fill
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(color)
+        painter.drawRoundedRect(7, 7, fill_width, 16, 2, 2)
+        
+        # Draw percentage text
+        painter.setPen(Qt.black)
+        painter.setFont(QFont("Arial", 8))
+        painter.drawText(0, 0, 80, 30, Qt.AlignCenter, f"{int(self.percentage)}%")
+        
+        # Draw voltage text below if there's space
+        painter.setFont(QFont("Arial", 6))
+        painter.drawText(0, 30, 80, 15, Qt.AlignCenter, f"{self.voltage:.2f}V")
 
 class CalibrationSerialThread(QThread):
     distance_measured = pyqtSignal(float)  # Raw distance in mm
@@ -1297,11 +1383,22 @@ class App(QMainWindow):
         # Setup camera thread
         self.setup_camera_thread()
         
+        # Create battery monitor and indicator
+        self.battery_monitor = BatteryMonitorThread()
+        self.battery_indicator = BatteryIndicator()
+        
+        # Add battery indicator to top right corner
+        self.battery_indicator.setParent(self.central_widget)
+        self.battery_indicator.move(self.width() - 100, 10)
+        
         # Connect signals
+        self.battery_monitor.battery_updated.connect(self.battery_indicator.update_battery)
+        self.battery_monitor.start()
         self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
 
     def resizeEvent(self, event):
         # Ensure the layout stays stable during resizing
+        self.battery_indicator.move(self.width() - 100, 10)
         self.stacked_widget.updateGeometry()
         self.stacked_widget.adjustSize()
         super().resizeEvent(event)
@@ -1675,6 +1772,7 @@ class App(QMainWindow):
         self.camera_thread.stop()
         if hasattr(self, 'sensor_thread'):
             self.sensor_thread.stop()
+            self.battery_monitor.stop()
         event.accept()
 
 if __name__ == "__main__":
