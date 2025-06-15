@@ -127,7 +127,6 @@ class BatteryMonitorThread(QThread):
         self._run_flag = False
         self.wait(2000)
 
-# Add this new widget class for the battery indicator
 class BatteryIndicator(QWidget):
     def __init__(self, parent=None, compact=False):
         super().__init__(parent)
@@ -885,6 +884,7 @@ class InspectionPage(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.layout.setSpacing(10)
+        self.layout.addSpacing(35)
         
         # Camera Panel - Top section
         self.camera_panel = QFrame()
