@@ -127,14 +127,19 @@ class BatteryMonitorThread(QThread):
         self._run_flag = False
         self.wait(2000)
 
-# Add this new widget class for the battery indicator
 class BatteryIndicator(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, compact=False):
         super().__init__(parent)
-        self.setFixedSize(80, 40)
+        self.compact = compact
         self.voltage = 0.0
         self.percentage = 0
         self.setStyleSheet("background: transparent;")
+        
+        # Set size based on whether it's compact mode
+        if compact:
+            self.setFixedSize(50, 25)
+        else:
+            self.setFixedSize(80, 40)
         
     def update_battery(self, voltage, percentage):
         self.voltage = voltage
@@ -145,14 +150,27 @@ class BatteryIndicator(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         
+        w = self.width()
+        h = self.height()
+        
         # Draw battery outline
-        painter.setPen(QPen(Qt.black, 2))
+        body_width = w * 0.7
+        body_height = h * 0.6
+        tip_width = w * 0.1
+        tip_height = h * 0.3
+        
+        body_x = (w - body_width - tip_width) / 2
+        body_y = (h - body_height) / 2
+        tip_x = body_x + body_width
+        tip_y = body_y + (body_height - tip_height) / 2
+        
+        painter.setPen(QPen(Qt.black, 1))
         painter.setBrush(Qt.transparent)
-        painter.drawRoundedRect(5, 5, 60, 20, 3, 3)
-        painter.drawRect(65, 10, 5, 10)  # Battery tip
+        painter.drawRoundedRect(body_x, body_y, body_width, body_height, 2, 2)
+        painter.drawRect(tip_x, tip_y, tip_width, tip_height)  # Battery tip
         
         # Calculate fill width based on percentage
-        fill_width = max(0, min(58, int(58 * self.percentage / 100)))
+        fill_width = max(0, min(body_width - 4, (body_width - 4) * self.percentage / 100))
         
         # Choose color based on battery level
         if self.percentage > 60:
@@ -165,16 +183,14 @@ class BatteryIndicator(QWidget):
         # Draw battery fill
         painter.setPen(Qt.NoPen)
         painter.setBrush(color)
-        painter.drawRoundedRect(7, 7, fill_width, 16, 2, 2)
+        painter.drawRoundedRect(body_x+2, body_y+2, fill_width, body_height-4, 1, 1)
         
-        # Draw percentage text
-        painter.setPen(Qt.black)
-        painter.setFont(QFont("Arial", 8))
-        painter.drawText(0, 0, 80, 30, Qt.AlignCenter, f"{int(self.percentage)}%")
-        
-        # Draw voltage text below
-        painter.setFont(QFont("Arial", 7))
-        painter.drawText(0, 25, 80, 15, Qt.AlignCenter, f"{self.voltage:.2f}V")
+        # Draw percentage text only in non-compact mode
+        if not self.compact:
+            painter.setPen(Qt.black)
+            font = QFont("Arial", 8)
+            painter.setFont(font)
+            painter.drawText(0, 0, w, h, Qt.AlignCenter, f"{int(self.percentage)}%")
 
 class CalibrationSerialThread(QThread):
     distance_measured = pyqtSignal(float)  # Raw distance in mm
@@ -864,6 +880,10 @@ class InspectionPage(QWidget):
         self.setup_ui()
         self.setup_animations()
 
+        # Create compact battery indicator
+        self.battery_indicator = BatteryIndicator(compact=True)
+        self.battery_indicator.setVisible(False)  # Hide until we have battery data
+
     def setup_ui(self):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(10, 10, 10, 10)
@@ -980,12 +1000,36 @@ class InspectionPage(QWidget):
         """)
         self.diameter_label.hide()
         
+         # Add real-time status indicator with battery
+        self.status_container = QWidget()
+        self.status_container.setStyleSheet("background: rgba(0,0,0,0.5); border-radius: 5px;")
+        self.status_layout = QHBoxLayout()
+        self.status_layout.setContentsMargins(5, 2, 5, 2)
+        self.status_layout.setSpacing(10)
+        
+        self.realtime_status_indicator = QLabel("READY")
+        self.realtime_status_indicator.setAlignment(Qt.AlignCenter)
+        self.realtime_status_indicator.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-family: 'Montserrat Regular';
+                font-size: 14px;
+            }
+        """)
+
         self.status_layout.addWidget(self.status_title)
         self.status_layout.addWidget(self.status_indicator)
         self.status_layout.addWidget(self.recommendation_indicator)
         self.status_layout.addWidget(self.diameter_label)
         self.status_panel.setLayout(self.status_layout)
         self.control_layout.addWidget(self.status_panel)
+
+        # Add battery indicator to the status layout
+        self.status_layout.addWidget(self.realtime_status_indicator)
+        self.status_layout.addWidget(self.battery_indicator)
+        
+        self.status_container.setLayout(self.status_layout)
+        self.camera_layout.addWidget(self.status_container, alignment=Qt.AlignBottom | Qt.AlignCenter)
         
         # Button Panel - Horizontal layout for buttons
         self.button_panel = QFrame()
@@ -1405,6 +1449,10 @@ class App(QMainWindow):
         
         # Connect signals
         self.battery_monitor.battery_updated.connect(self.battery_indicator.update_battery)
+        self.battery_monitor.battery_updated.connect(self.inspection_page.battery_indicator.update_battery)
+        
+        # Make inspection page's battery indicator visible
+        self.inspection_page.battery_indicator.setVisible(True)
         self.battery_monitor.start()
         self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
 
@@ -1434,40 +1482,36 @@ class App(QMainWindow):
 
     def update_realtime_status(self, status, recommendation):
         """Update the real-time classification status in the UI"""
-        self.inspection_page.realtime_status_indicator.setText(status)
+        self.realtime_status_indicator.setText(status)
         
         # Update status color based on classification
         if status == "FLAW DETECTED":
-            self.inspection_page.realtime_status_indicator.setStyleSheet("""
+            self.status_container.setStyleSheet("background: rgba(150,0,0,0.7); border-radius: 5px;")
+            self.realtime_status_indicator.setStyleSheet("""
                 QLabel {
-                    color: red;
+                    color: white;
                     font-family: 'Montserrat SemiBold';
                     font-size: 14px;
-                    background-color: rgba(0,0,0,0.5);
-                    padding: 2px 5px;
-                    border-radius: 5px;
                 }
             """)
         elif status == "NO FLAW":
-            self.inspection_page.realtime_status_indicator.setStyleSheet("""
+            self.status_container.setStyleSheet("background: rgba(0,100,0,0.7); border-radius: 5px;")
+            self.realtime_status_indicator.setStyleSheet("""
                 QLabel {
-                    color: #00CC00;
+                    color: white;
                     font-family: 'Montserrat SemiBold';
                     font-size: 14px;
-                    background-color: rgba(0,0,0,0.5);
-                    padding: 2px 5px;
-                    border-radius: 5px;
                 }
             """)
         else:
-            self.inspection_page.realtime_status_indicator.setStyleSheet("""
+            self.status_container.setStyleSheet("background: rgba(0,0,0,0.5); border-radius: 5px;")
+            self.realtime_status_indicator.setStyleSheet("""
                 QLabel {
                     color: #666;
                     font-family: 'Montserrat Regular';
                     font-size: 14px;
                 }
             """)
-
     def update_image(self, qt_image):
         self.inspection_page.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
             self.inspection_page.camera_label.size(), 
