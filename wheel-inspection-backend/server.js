@@ -59,26 +59,6 @@
     process.exit(1);
   });
 
-  // MIGRATION SCRIPT
-  mongoose.connection.once('open', async () => {
-    try {
-      const users = await User.find({ 'email.isActive': { $exists: true } });
-      if (users.length > 0) {
-        console.log('Migrating user isActive fields...');
-        await Promise.all(users.map(async user => {
-          if (user.email.isActive !== undefined) {
-            user.isActive = user.email.isActive;
-            delete user.email.isActive;
-            await user.save();
-          }
-        }));
-        console.log('Migration complete');
-      }
-    } catch (err) {
-      console.error('Migration error:', err);
-    }
-  });
-
   const userSchema = new mongoose.Schema({
     isActive: { type: Boolean, default: true },
     email: { 
@@ -499,6 +479,37 @@
     }
   });
 
+  //Resend OTP
+  app.post('/api/auth/resend-otp', async (req, res) => {
+  const { email } = req.body;
+  
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: 'No user with this email' });
+    }
+
+    // Generate new 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    user.otp = otp;
+    user.otpExpiry = otpExpiry;
+    await user.save();
+
+    // Send email
+    await transporter.sendMail({
+      to: user.email,
+      subject: 'Your New Password Reset OTP',
+      text: `Your new OTP is: ${otp}\n\nValid for 10 minutes.`
+    });
+
+    res.json({ message: 'New OTP sent successfully' });
+  } catch (err) {
+    console.error('Resend OTP error:', err);
+    res.status(500).json({ error: 'Failed to resend OTP' });
+  }
+});
   // Verify OTP
   app.post('/api/auth/verify-otp', async (req, res) => {
     const { email, otp } = req.body;
