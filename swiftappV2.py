@@ -878,6 +878,8 @@ class InspectionPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
+        self.captured_image = None  # Add this to store captured image
+        self.is_captured_mode = False  # Flag for captured image display
         self.setup_ui()
         self.setup_animations()
 
@@ -1034,7 +1036,7 @@ class InspectionPage(QWidget):
             }
         """
         
-        self.detect_btn = QPushButton("DETECT\nFLAWS")
+        self.detect_btn = QPushButton("CAPTURE\nFLAWS")
         self.detect_btn.setCursor(Qt.PointingHandCursor)
         self.detect_btn.setStyleSheet(button_style % ("#e60000", "#cc0000", "#b30000"))
         
@@ -1378,6 +1380,7 @@ class App(QMainWindow):
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
+        self.captured_image = None  # Add this to store captured image
         
         # Initialize UI components to avoid attribute errors
         self.battery_indicator = None
@@ -1498,11 +1501,21 @@ class App(QMainWindow):
             """)
 
     def update_image(self, qt_image):
-        self.inspection_page.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
-            self.inspection_page.camera_label.size(), 
-            Qt.KeepAspectRatio, 
-            Qt.SmoothTransformation
-        ))
+        if self.captured_image:
+            # Display captured image if available
+            self.inspection_page.camera_label.setPixmap(
+                QPixmap.fromImage(self.captured_image).scaled(
+                self.inspection_page.camera_label.size(), 
+                Qt.KeepAspectRatio, 
+                Qt.SmoothTransformation
+            ))
+        else:
+            # Otherwise show live feed
+            self.inspection_page.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
+                self.inspection_page.camera_label.size(), 
+                Qt.KeepAspectRatio, 
+                Qt.SmoothTransformation
+            ))
 
     def update_status(self, status, recommendation):
         if status in ["FLAW DETECTED", "NO FLAW"]:
@@ -1590,6 +1603,13 @@ class App(QMainWindow):
         
         self.camera_thread.start_test()
 
+        if self.camera_thread.last_frame is not None:
+            frame = self.camera_thread.last_frame.copy()
+            rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb_image.shape
+            bytes_per_line = ch * w
+            self.captured_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+
     def update_diameter(self, diameter):
         """Update the UI with the measured diameter"""
         self.current_distance = diameter
@@ -1657,6 +1677,7 @@ class App(QMainWindow):
             
         self.test_status = status
         self.test_recommendation = recommendation
+        self.captured_image = None  # Clear captured image flag
 
         # After detection, show:
         # - Detect Flaws (disabled)
@@ -1805,6 +1826,7 @@ class App(QMainWindow):
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
+        self.captured_image = None  # Reset captured image on new inspection
         
         # Reload the model for next use
         self.camera_thread.load_model()
