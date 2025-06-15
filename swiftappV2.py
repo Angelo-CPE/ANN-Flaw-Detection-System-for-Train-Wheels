@@ -6,6 +6,7 @@ import base64
 import torch
 import numpy as np
 import requests
+import smbus
 from ina219 import INA219
 from ina219 import DeviceRangeError
 from skimage.feature import hog
@@ -87,12 +88,18 @@ class BatteryMonitorThread(QThread):
         super().__init__()
         self._run_flag = True
         self.ina = None
+        self.bus = None
         
     def run(self):
         try:
+            # Create I2C bus explicitly for Raspberry Pi
+            self.bus = smbus.SMBus(1)  # Use bus 1 for Raspberry Pi models 2 and later
+            
             # Initialize INA219 with correct parameters
-            self.ina = INA219(shunt_ohms=0.1, max_expected_amps=0.6, address=0x42)
+            self.ina = INA219(shunt_ohms=0.1, max_expected_amps=0.6, address=0x42, busnum=self.bus)
             self.ina.configure(voltage_range=self.ina.RANGE_16V)
+            
+            print("Battery monitor initialized successfully")
         except Exception as e:
             print(f"Battery monitor initialization failed: {e}")
             self.battery_updated.emit(0, 0)
@@ -101,7 +108,8 @@ class BatteryMonitorThread(QThread):
         while self._run_flag:
             try:
                 voltage = self.ina.voltage()
-                # Calculate percentage (simplified - adjust based on your battery specs)
+                # Calculate percentage for 2-cell Li-ion battery
+                # (6.0V = 0%, 8.4V = 100%)
                 percentage = min(100, max(0, (voltage - 6.0) / (8.4 - 6.0) * 100))
                 self.battery_updated.emit(voltage, percentage)
             except DeviceRangeError as e:
@@ -119,7 +127,7 @@ class BatteryMonitorThread(QThread):
 class BatteryIndicator(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(80, 30)
+        self.setFixedSize(80, 40)
         self.voltage = 0.0
         self.percentage = 0
         self.setStyleSheet("background: transparent;")
@@ -160,9 +168,9 @@ class BatteryIndicator(QWidget):
         painter.setFont(QFont("Arial", 8))
         painter.drawText(0, 0, 80, 30, Qt.AlignCenter, f"{int(self.percentage)}%")
         
-        # Draw voltage text below if there's space
-        painter.setFont(QFont("Arial", 6))
-        painter.drawText(0, 30, 80, 15, Qt.AlignCenter, f"{self.voltage:.2f}V")
+        # Draw voltage text below
+        painter.setFont(QFont("Arial", 7))
+        painter.drawText(0, 25, 80, 15, Qt.AlignCenter, f"{self.voltage:.2f}V")
 
 class CalibrationSerialThread(QThread):
     distance_measured = pyqtSignal(float)  # Raw distance in mm
