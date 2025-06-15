@@ -610,7 +610,7 @@ app.get('/api/auth/verify', async (req, res) => {
       await transporter.sendMail({
         to: user.email,
         subject: 'Your Password Reset OTP',
-        html: otpMessage
+        html: otpEmail
       });
 
       res.json({ message: 'OTP sent successfully' });
