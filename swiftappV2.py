@@ -127,6 +127,7 @@ class BatteryMonitorThread(QThread):
         self._run_flag = False
         self.wait(2000)
 
+# Add this new widget class for the battery indicator
 class BatteryIndicator(QWidget):
     def __init__(self, parent=None, compact=False):
         super().__init__(parent)
@@ -673,15 +674,10 @@ class SelectionPage(QWidget):
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(20, 5, 20, 15)
-        self.layout.setSpacing(5)
+        self.layout.setContentsMargins(20, 5, 20, 15)  # Reduced top and bottom margins
+        self.layout.setSpacing(5)   
         
-        # Create top bar layout
-        top_bar_layout = QHBoxLayout()
-        top_bar_layout.setContentsMargins(0, 0, 0, 0)
-        top_bar_layout.setSpacing(10)
-        
-        # Back Button
+        # Back Button - made more compact
         self.back_button = QPushButton("← Back")
         self.back_button.setStyleSheet("""
             QPushButton {
@@ -704,35 +700,7 @@ class SelectionPage(QWidget):
             }
         """)
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
-        top_bar_layout.addWidget(self.back_button)
-        
-        # Add stretch to push battery to right
-        top_bar_layout.addStretch()
-        
-        # Battery Indicator (compact)
-        self.battery_container = QWidget()
-        battery_layout = QHBoxLayout()
-        battery_layout.setContentsMargins(0, 0, 0, 0)
-        battery_layout.setSpacing(5)
-        
-        self.battery_icon = BatteryIndicator(compact=True)
-        self.battery_percentage = QLabel("--%")
-        self.battery_percentage.setStyleSheet("""
-            QLabel {
-                color: #333;
-                font-family: 'Montserrat Regular';
-                font-size: 14px;
-            }
-        """)
-        
-        battery_layout.addWidget(self.battery_icon)
-        battery_layout.addWidget(self.battery_percentage)
-        self.battery_container.setLayout(battery_layout)
-        self.battery_container.setVisible(False)
-        
-        top_bar_layout.addWidget(self.battery_container)
-        
-        self.layout.addLayout(top_bar_layout)
+        self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
         # Logo - reduced spacing
         self.logo_label = QLabel()
@@ -898,11 +866,6 @@ class SelectionPage(QWidget):
         self.compartment_slider.valueChanged.connect(lambda: self.compartment_value.setText(str(self.compartment_slider.value())))
         self.wheel_slider.valueChanged.connect(lambda: self.wheel_value.setText(str(self.wheel_slider.value())))
 
-    def update_battery(self, voltage, percentage):
-        self.battery_icon.update_battery(voltage, percentage)
-        self.battery_percentage.setText(f"{int(percentage)}%")
-        self.battery_container.setVisible(True)
-
     def start_inspection(self):
         self.parent.trainNumber = self.train_slider.value()
         self.parent.compartmentNumber = self.compartment_slider.value()
@@ -910,7 +873,6 @@ class SelectionPage(QWidget):
         # Update the inspection page's selection label
         self.parent.inspection_page.update_selection_label()
         self.parent.stacked_widget.setCurrentIndex(2)
-
 
 class InspectionPage(QWidget):
     def __init__(self, parent=None):
@@ -924,65 +886,7 @@ class InspectionPage(QWidget):
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.layout.setSpacing(10)
         
-        # Create top bar
-        top_bar_layout = QHBoxLayout()
-        top_bar_layout.setContentsMargins(0, 0, 0, 0)
-        top_bar_layout.setSpacing(10)
-        
-        # Back Button
-        self.back_button = QPushButton("← Back")
-        self.back_button.setStyleSheet("""
-            QPushButton {
-                background: #f0f0f0;
-                color: #333;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 5px 10px;
-                font-family: 'Montserrat SemiBold';
-                font-size: 14px;
-                min-width: 70px;
-            }
-            QPushButton:hover {
-                background: #e60000;
-                color: white;
-                border-color: #e60000;
-            }
-            QPushButton:pressed {
-                background: #b30000;
-            }
-        """)
-        self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(1))
-        top_bar_layout.addWidget(self.back_button)
-        
-        # Add stretch to push battery to right
-        top_bar_layout.addStretch()
-        
-        # Battery Indicator (compact)
-        self.battery_container = QWidget()
-        battery_layout = QHBoxLayout()
-        battery_layout.setContentsMargins(0, 0, 0, 0)
-        battery_layout.setSpacing(5)
-        
-        self.battery_icon = BatteryIndicator(compact=True)
-        self.battery_percentage = QLabel("--%")
-        self.battery_percentage.setStyleSheet("""
-            QLabel {
-                color: #333;
-                font-family: 'Montserrat Regular';
-                font-size: 14px;
-            }
-        """)
-        
-        battery_layout.addWidget(self.battery_icon)
-        battery_layout.addWidget(self.battery_percentage)
-        self.battery_container.setLayout(battery_layout)
-        self.battery_container.setVisible(False)
-        
-        top_bar_layout.addWidget(self.battery_container)
-        
-        self.layout.addLayout(top_bar_layout)
-        
-        # Camera Panel - Adjusted to accommodate top bar
+        # Camera Panel - Top section
         self.camera_panel = QFrame()
         self.camera_panel.setStyleSheet("QFrame { background: white; border: 5px solid transparent; }")
         self.camera_layout = QVBoxLayout()
@@ -998,31 +902,24 @@ class InspectionPage(QWidget):
                 border: 5px solid transparent;
             }
         """)
-        self.camera_layout.addWidget(self.camera_label)
-   
-        # Create container for real-time status (without battery)
-        self.realtime_status_container = QWidget()
-        self.realtime_status_container.setStyleSheet("background: rgba(0,0,0,0.5); border-radius: 5px;")
-        self.realtime_status_layout = QHBoxLayout()
-        self.realtime_status_layout.setContentsMargins(5, 2, 5, 2)
-        self.realtime_status_layout.setSpacing(10)
         
-        # Real-time status label only
-        self.realtime_status_label = QLabel("READY")
-        self.realtime_status_label.setStyleSheet("""
+        # Add the camera label to the layout (THIS WAS MISSING)
+        self.camera_layout.addWidget(self.camera_label)
+
+        # Add real-time status indicator
+        self.realtime_status_indicator = QLabel("READY")
+        self.realtime_status_indicator.setAlignment(Qt.AlignCenter)
+        self.realtime_status_indicator.setStyleSheet("""
             QLabel {
                 color: #666;
                 font-family: 'Montserrat Regular';
                 font-size: 14px;
+                padding-top: 5px;
             }
         """)
-        self.realtime_status_layout.addWidget(self.realtime_status_label)
-        
-        self.realtime_status_container.setLayout(self.realtime_status_layout)
-        self.camera_layout.addWidget(self.realtime_status_container, alignment=Qt.AlignBottom | Qt.AlignCenter)
-        
+        self.camera_layout.addWidget(self.realtime_status_indicator, alignment=Qt.AlignBottom | Qt.AlignCenter)
         self.camera_panel.setLayout(self.camera_layout)
-        self.layout.addWidget(self.camera_panel, stretch=1)
+        self.layout.addWidget(self.camera_panel, stretch=1)  # Camera takes more space
         
         # Control Panel - Bottom section
         self.control_panel = QFrame()
@@ -1184,23 +1081,6 @@ class InspectionPage(QWidget):
             f"Compartment: {self.parent.compartmentNumber} | "
             f"Wheel: {self.parent.wheelNumber}"
         )
-    
-    def update_battery(self, voltage, percentage):
-        self.battery_icon.update_battery(voltage, percentage)
-        self.battery_percentage.setText(f"{int(percentage)}%")
-        self.battery_container.setVisible(True)
-        
-        # Update status container color based on battery level
-        if percentage > 60:
-            color = "rgba(0,150,0,0.7)"
-        elif percentage > 20:
-            color = "rgba(255,165,0,0.7)"
-        else:
-            color = "rgba(200,0,0,0.7)"
-            
-        self.realtime_status_container.setStyleSheet(
-            f"background: {color}; border-radius: 5px;"
-        )
 
     def setup_animations(self):
         self.status_animation = QPropertyAnimation(self.status_indicator, b"windowOpacity")
@@ -1222,11 +1102,6 @@ class CalibrationPage(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(30, 20, 30, 30)
         self.layout.setSpacing(15)
-        
-        # Create top bar
-        top_bar_layout = QHBoxLayout()
-        top_bar_layout.setContentsMargins(0, 0, 0, 0)
-        top_bar_layout.setSpacing(10)
         
         # Back Button
         self.back_button = QPushButton("← Back")
@@ -1251,35 +1126,7 @@ class CalibrationPage(QWidget):
             }
         """)
         self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
-        top_bar_layout.addWidget(self.back_button)
-        
-        # Add stretch to push battery to right
-        top_bar_layout.addStretch()
-        
-        # Battery Indicator (compact)
-        self.battery_container = QWidget()
-        battery_layout = QHBoxLayout()
-        battery_layout.setContentsMargins(0, 0, 0, 0)
-        battery_layout.setSpacing(5)
-        
-        self.battery_icon = BatteryIndicator(compact=True)
-        self.battery_percentage = QLabel("--%")
-        self.battery_percentage.setStyleSheet("""
-            QLabel {
-                color: #333;
-                font-family: 'Montserrat Regular';
-                font-size: 14px;
-            }
-        """)
-        
-        battery_layout.addWidget(self.battery_icon)
-        battery_layout.addWidget(self.battery_percentage)
-        self.battery_container.setLayout(battery_layout)
-        self.battery_container.setVisible(False)
-        
-        top_bar_layout.addWidget(self.battery_container)
-        
-        self.layout.addLayout(top_bar_layout)
+        self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
         # Logo
         self.logo_label = QLabel()
@@ -1477,11 +1324,6 @@ class CalibrationPage(QWidget):
         self.calib_700_button.setEnabled(True)
         self.calib_600_button.setEnabled(True)
 
-    def update_battery(self, voltage, percentage):
-        self.battery_icon.update_battery(voltage, percentage)
-        self.battery_percentage.setText(f"{int(percentage)}%")
-        self.battery_container.setVisible(True)
-
     def save_calibration_values(self):
         # Save to file with the new format that includes recalculated constants and timestamps
         print("Calibration values:", self.calibration_values)
@@ -1527,12 +1369,13 @@ class App(QMainWindow):
         self.setWindowTitle("Wheel Inspection")
         self.setWindowIcon(QIcon("logo.png"))
         
-        self.setMinimumSize(480, 800)
-        QApplication.processEvents()
-        self.showNormal()
-        QApplication.processEvents()
-        self.showFullScreen()
-
+        # Add these lines before showing fullscreen
+        self.setMinimumSize(480, 800)  # Set a reasonable minimum size
+        QApplication.processEvents()  # Allow initial layout calculations
+        self.showNormal()  # Show normal first
+        QApplication.processEvents()  # Process any pending events
+        self.showFullScreen()  # Then go fullscreen
+            
         self.trainNumber = 1
         self.compartmentNumber = 1
         self.wheelNumber = 1
@@ -1540,69 +1383,60 @@ class App(QMainWindow):
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
-
+        
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.central_widget.setStyleSheet("background: white;")
-
+        
         self.main_layout = QVBoxLayout()
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
         self.central_widget.setLayout(self.main_layout)
-
-        # Create stacked widget first so other components can use it
+        
+        # Create stacked widget for pages
         self.stacked_widget = QStackedWidget()
         self.main_layout.addWidget(self.stacked_widget)
-
-        # Create stacked widget
-        self.stacked_widget = QStackedWidget()
-        self.main_layout.addWidget(self.stacked_widget)
-
-        # Pages
+        
+        # Create pages
         self.home_page = HomePage(self)
         self.selection_page = SelectionPage(self)
         self.inspection_page = InspectionPage(self)
         self.calibration_page = CalibrationPage(self)
-
+        
+        # Add pages to stacked widget
         self.stacked_widget.addWidget(self.home_page)          # Index 0
         self.stacked_widget.addWidget(self.selection_page)     # Index 1
-        self.stacked_widget.addWidget(self.inspection_page)    # Index 2
-        self.stacked_widget.addWidget(self.calibration_page)   # Index 3
-
-        # Camera thread
-        self.setup_camera_thread()
-
-        # Battery monitor setup
-        self.battery_monitor = BatteryMonitorThread()
-        self.battery_monitor.battery_updated.connect(self.update_battery_ui)
-        self.battery_monitor.start()
+        self.stacked_widget.addWidget(self.inspection_page)   # Index 2
+        self.stacked_widget.addWidget(self.calibration_page)  # Index 3
         
+        # Setup camera thread
+        self.setup_camera_thread()
+        
+        # Create battery monitor and indicator
+        self.battery_monitor = BatteryMonitorThread()
+        self.battery_indicator = BatteryIndicator()
+        
+        # Add battery indicator to top right corner
+        self.battery_indicator.setParent(self.central_widget)
+        self.battery_indicator.move(self.width() - 100, 10)
+        
+        # Connect signals
+        self.battery_monitor.battery_updated.connect(self.battery_indicator.update_battery)
+        self.battery_monitor.start()
         self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
 
-        # Position battery indicator after window is shown
-        QTimer.singleShot(100, self.position_battery_indicator)
-
-    def position_battery_indicator(self):
-        """Position battery indicator after window is visible"""
-        if hasattr(self, 'battery_indicator'):
-            self.battery_indicator.move(self.width() - 100, 10)
-            self.battery_indicator.raise_()
-
     def resizeEvent(self, event):
+        # Ensure the layout stays stable during resizing
+        self.battery_indicator.move(self.width() - 100, 10)
+        self.stacked_widget.updateGeometry()
+        self.stacked_widget.adjustSize()
         super().resizeEvent(event)
 
     def showEvent(self, event):
-        if hasattr(self, 'stacked_widget'):
-            self.stacked_widget.updateGeometry()
-            self.stacked_widget.adjustSize()
+        # Ensure proper layout when showing
+        self.stacked_widget.updateGeometry()
+        self.stacked_widget.adjustSize()
         super().showEvent(event)
-        
-    def update_battery_ui(self, voltage, percentage):
-        """Update battery indicators in all pages"""
-        # Update page-specific battery indicators
-        self.selection_page.update_battery(voltage, percentage)
-        self.inspection_page.update_battery(voltage, percentage)
-        self.calibration_page.update_battery(voltage, percentage)
 
     def setup_camera_thread(self):
         self.camera_thread = CameraThread()
@@ -1617,30 +1451,33 @@ class App(QMainWindow):
 
     def update_realtime_status(self, status, recommendation):
         """Update the real-time classification status in the UI"""
-        self.inspection_page.realtime_status_label.setText(status)
+        self.inspection_page.realtime_status_indicator.setText(status)
         
         # Update status color based on classification
         if status == "FLAW DETECTED":
-            self.inspection_page.realtime_status_container.setStyleSheet("background: rgba(150,0,0,0.7); border-radius: 5px;")
-            self.inspection_page.realtime_status_label.setStyleSheet("""
+            self.inspection_page.realtime_status_indicator.setStyleSheet("""
                 QLabel {
-                    color: white;
+                    color: red;
                     font-family: 'Montserrat SemiBold';
                     font-size: 14px;
+                    background-color: rgba(0,0,0,0.5);
+                    padding: 2px 5px;
+                    border-radius: 5px;
                 }
             """)
         elif status == "NO FLAW":
-            self.inspection_page.realtime_status_container.setStyleSheet("background: rgba(0,100,0,0.7); border-radius: 5px;")
-            self.inspection_page.realtime_status_label.setStyleSheet("""
+            self.inspection_page.realtime_status_indicator.setStyleSheet("""
                 QLabel {
-                    color: white;
+                    color: #00CC00;
                     font-family: 'Montserrat SemiBold';
                     font-size: 14px;
+                    background-color: rgba(0,0,0,0.5);
+                    padding: 2px 5px;
+                    border-radius: 5px;
                 }
             """)
         else:
-            self.inspection_page.realtime_status_container.setStyleSheet("background: rgba(0,0,0,0.5); border-radius: 5px;")
-            self.inspection_page.realtime_status_label.setStyleSheet("""
+            self.inspection_page.realtime_status_indicator.setStyleSheet("""
                 QLabel {
                     color: #666;
                     font-family: 'Montserrat Regular';
