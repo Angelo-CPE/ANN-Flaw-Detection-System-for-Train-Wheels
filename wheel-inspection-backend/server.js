@@ -47,6 +47,7 @@
       pass: EMAIL_PASS
     }
   });
+  app.use(express.static(path.join(__dirname, 'public')));
 
   mongoose.connect(MONGODB_URI, { 
     useNewUrlParser: true, 
@@ -75,17 +76,10 @@
         message: props => `${props.value} is not a valid TIP email address!`
       }
     },
-    password: { 
-      type: String, 
-      required: true, 
-      select: false,
-      validate: {
-        validator: function(v) {
-          return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(v);
-        },
-        message: props => 
-          'Password must contain at least 8 characters, one uppercase, one lowercase, one number and one special character'
-      }
+    password: {
+      type: String,
+      required: true,
+      select: false
     },
     name: { type: String, required: true },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
