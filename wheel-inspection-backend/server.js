@@ -361,35 +361,36 @@
   });
 
   app.post('/api/auth/login', [
-    body('email').isEmail().withMessage('Please include a valid email'),
-    body('password').exists().withMessage('Please include a password')
-  ], async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+  body('email').isEmail().withMessage('Please include a valid email'),
+  body('password').exists().withMessage('Please include a password')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  
+  try {
+    const { email, password } = req.body;
+    
+    const user = await User.findOne({ email }).select('+password');
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    }
+    if (!user.isActive) {
+      return res.status(403).json({ error: 'Your account has been deactivated. Please contact the administrator.' });
+    }
+
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, error: 'Invalid credentials' });
     }
     
-    try {
-      const { email, password } = req.body;
-      
-      const user = await User.findOne({ email }).select('+password');
-      if (!user) {
-        return res.status(401).json({ success: false, error: 'Invalid credentials' });
-      }
-      if (!user.isActive) {
-        return res.status(403).json({ error: 'Your account has been deactivated. Please contact the administrator.' });
-      }
-
-      const isMatch = await user.matchPassword(password);
-      if (!isMatch) {
-        return res.status(401).json({ success: false, error: 'Invalid credentials' });
-      }
-      
-      sendTokenResponse(user, 200, res);
-    } catch (err) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
+    // This sends both token and user info to the client
+    sendTokenResponse(user, 200, res);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
   app.post('/api/auth/forgotpassword', async (req, res) => {
     const { email } = req.body;
