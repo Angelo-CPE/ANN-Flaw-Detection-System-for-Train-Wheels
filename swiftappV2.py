@@ -1369,21 +1369,11 @@ class App(QMainWindow):
         self.setWindowTitle("Wheel Inspection")
         self.setWindowIcon(QIcon("logo.png"))
         
-        # Add these lines before showing fullscreen
-        self.setMinimumSize(480, 800)  # Set a reasonable minimum size
-        QApplication.processEvents()  # Allow initial layout calculations
-        self.showNormal()  # Show normal first
-        QApplication.processEvents()  # Process any pending events
-        self.showFullScreen()  # Then go fullscreen
-            
-        self.trainNumber = 1
-        self.compartmentNumber = 1
-        self.wheelNumber = 1
-        self.current_distance = 0
-        self.test_image = None
-        self.test_status = None
-        self.test_recommendation = None
+        # Initialize attributes to avoid attribute errors
+        self.battery_indicator = None
+        self.stacked_widget = None
         
+        # Set up UI first
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.central_widget.setStyleSheet("background: white;")
@@ -1418,6 +1408,15 @@ class App(QMainWindow):
         
         # Add battery indicator to top right corner
         self.battery_indicator.setParent(self.central_widget)
+        
+        # Now show the window
+        self.setMinimumSize(480, 800)  # Set a reasonable minimum size
+        QApplication.processEvents()  # Allow initial layout calculations
+        self.showNormal()  # Show normal first
+        QApplication.processEvents()  # Process any pending events
+        self.showFullScreen()  # Then go fullscreen
+        
+        # Position battery indicator after window is shown
         self.battery_indicator.move(self.width() - 100, 10)
         
         # Connect signals
@@ -1427,15 +1426,18 @@ class App(QMainWindow):
 
     def resizeEvent(self, event):
         # Ensure the layout stays stable during resizing
-        self.battery_indicator.move(self.width() - 100, 10)
-        self.stacked_widget.updateGeometry()
-        self.stacked_widget.adjustSize()
+        if self.battery_indicator:
+            self.battery_indicator.move(self.width() - 100, 10)
+        if self.stacked_widget:
+            self.stacked_widget.updateGeometry()
+            self.stacked_widget.adjustSize()
         super().resizeEvent(event)
 
     def showEvent(self, event):
         # Ensure proper layout when showing
-        self.stacked_widget.updateGeometry()
-        self.stacked_widget.adjustSize()
+        if self.stacked_widget:
+            self.stacked_widget.updateGeometry()
+            self.stacked_widget.adjustSize()
         super().showEvent(event)
 
     def setup_camera_thread(self):
