@@ -1741,12 +1741,11 @@ class App(QMainWindow):
         msg.setWindowModality(Qt.ApplicationModal)
         
         # Center the message box on screen
-        screen_geometry = QApplication.desktop().availableGeometry(self)
-        msg_width = 500
-        msg_height = 300
-        x = screen_geometry.x() + (screen_geometry.width() - msg_width) // 2
-        y = screen_geometry.y() + (screen_geometry.height() - msg_height) // 2
-        msg.setGeometry(x, y, msg_width, msg_height)
+        screen_geometry = QApplication.desktop().availableGeometry()
+        msg_rect = msg.frameGeometry()
+        x = (screen_geometry.width() - msg_rect.width()) // 2
+        y = (screen_geometry.height() - msg_rect.height()) // 2
+        msg.move(x, y)
         
         if msg.exec_() == QMessageBox.Save:
             # Check if test_image exists and is valid
