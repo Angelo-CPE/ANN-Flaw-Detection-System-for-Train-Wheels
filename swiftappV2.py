@@ -1739,12 +1739,13 @@ class App(QMainWindow):
             #qt_msgbox_buttonbox { border-top: 1px solid #ddd; padding-top: 20px; }
         """)
         msg.setWindowModality(Qt.ApplicationModal)
-        msg.setGeometry(
-            self.geometry().x() + self.width()/2 - 250,
-            self.geometry().y() + self.height()/2 - 150,
-            500, 300
-        )
-        
+        screen_geometry = QApplication.desktop().availableGeometry(self)
+        msg_width = 500
+        msg_height = 300
+        x = screen_geometry.x() + (screen_geometry.width() - msg_width) // 2
+        y = screen_geometry.y() + (screen_geometry.height() - msg_height) // 2
+        msg.setGeometry(x, y, msg_width, msg_height)
+            
         if msg.exec_() == QMessageBox.Save:
             # Check if test_image exists and is valid
             if self.test_image is None or not isinstance(self.test_image, np.ndarray) or self.test_image.size == 0:
