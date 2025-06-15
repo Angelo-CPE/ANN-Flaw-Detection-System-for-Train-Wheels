@@ -423,39 +423,40 @@
   });
 
   //Verify Account
-  app.get('/api/auth/verify', async (req, res) => {
+app.get('/api/auth/verify', async (req, res) => {
     const { token } = req.query;
     
     if (!token) {
-      return res.status(400).json({ error: 'Invalid verification token' });
+        return res.status(400).send('Invalid verification token');
     }
     
     const verificationToken = crypto
-      .createHash('sha256')
-      .update(token)
-      .digest('hex');
+        .createHash('sha256')
+        .update(token)
+        .digest('hex');
     
     try {
-      const user = await User.findOne({
-        verificationToken,
-        verificationExpire: { $gt: Date.now() }
-      });
-      
-      if (!user) {
-        return res.status(400).json({ error: 'Invalid or expired verification token' });
-      }
-      
-      user.isVerified = true;
-      user.verificationToken = undefined;
-      user.verificationExpire = undefined;
-      
-      await user.save();
-      
-      res.redirect('/verification-success');
+        const user = await User.findOne({
+            verificationToken,
+            verificationExpire: { $gt: Date.now() }
+        });
+        
+        if (!user) {
+            return res.status(400).send('Invalid or expired verification token');
+        }
+        
+        user.isVerified = true;
+        user.verificationToken = undefined;
+        user.verificationExpire = undefined;
+        
+        await user.save();
+        
+        // Serve the HTML page
+        res.sendFile(path.join(__dirname, 'public', 'verification-success.html'));
     } catch (err) {
-      res.status(500).json({ error: 'Account verification failed' });
+        res.status(500).send('Account verification failed');
     }
-  });
+});
 
   //Resend Verification
   app.post('/api/auth/resend-verification', async (req, res) => {
