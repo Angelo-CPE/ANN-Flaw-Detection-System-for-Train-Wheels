@@ -888,6 +888,19 @@ class InspectionPage(QWidget):
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.layout.setSpacing(10)
         self.layout.addSpacing(35)
+
+        self.realtime_status_indicator = QLabel("READY")
+        self.realtime_status_indicator.setAlignment(Qt.AlignCenter)
+        self.realtime_status_indicator.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-family: 'Montserrat Regular';
+                font-size: 14px;
+                padding-top: 5px;
+            }
+        """)
+        self.realtime_status_indicator.setVisible(True)  # Ensure it's visible by default
+        self.camera_layout.addWidget(self.realtime_status_indicator, alignment=Qt.AlignBottom | Qt.AlignCenter)
         
         # Camera Panel - Top section
         self.camera_panel = QFrame()
@@ -1609,6 +1622,9 @@ class App(QMainWindow):
             h, w, ch = rgb_image.shape
             bytes_per_line = ch * w
             self.captured_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        
+        # Hide the real-time status indicator after capturing
+        self.inspection_page.realtime_status_indicator.hide()
 
     def update_diameter(self, diameter):
         """Update the UI with the measured diameter"""
@@ -1826,7 +1842,8 @@ class App(QMainWindow):
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
-        self.captured_image = None  # Reset captured image on new inspection
+        self.captured_image = None
+        self.inspection_page.realtime_status_indicator.show()
         
         # Reload the model for next use
         self.camera_thread.load_model()
