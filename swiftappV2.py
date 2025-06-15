@@ -889,19 +889,6 @@ class InspectionPage(QWidget):
         self.layout.setSpacing(10)
         self.layout.addSpacing(35)
 
-        self.realtime_status_indicator = QLabel("READY")
-        self.realtime_status_indicator.setAlignment(Qt.AlignCenter)
-        self.realtime_status_indicator.setStyleSheet("""
-            QLabel {
-                color: #666;
-                font-family: 'Montserrat Regular';
-                font-size: 14px;
-                padding-top: 5px;
-            }
-        """)
-        self.realtime_status_indicator.setVisible(True)  # Ensure it's visible by default
-        self.camera_layout.addWidget(self.realtime_status_indicator, alignment=Qt.AlignBottom | Qt.AlignCenter)
-        
         # Camera Panel - Top section
         self.camera_panel = QFrame()
         self.camera_panel.setStyleSheet("QFrame { background: white; border: 5px solid transparent; }")
@@ -918,11 +905,9 @@ class InspectionPage(QWidget):
                 border: 5px solid transparent;
             }
         """)
-        
-        # Add the camera label to the layout (THIS WAS MISSING)
         self.camera_layout.addWidget(self.camera_label)
-
-        # Add real-time status indicator
+        
+        # Add real-time status indicator HERE after camera_label
         self.realtime_status_indicator = QLabel("READY")
         self.realtime_status_indicator.setAlignment(Qt.AlignCenter)
         self.realtime_status_indicator.setStyleSheet("""
@@ -933,7 +918,9 @@ class InspectionPage(QWidget):
                 padding-top: 5px;
             }
         """)
+        self.realtime_status_indicator.setVisible(True)
         self.camera_layout.addWidget(self.realtime_status_indicator, alignment=Qt.AlignBottom | Qt.AlignCenter)
+
         self.camera_panel.setLayout(self.camera_layout)
         self.layout.addWidget(self.camera_panel, stretch=1)  # Camera takes more space
         
@@ -1843,6 +1830,7 @@ class App(QMainWindow):
         self.test_status = None
         self.test_recommendation = None
         self.captured_image = None
+
         self.inspection_page.realtime_status_indicator.show()
         
         # Reload the model for next use
