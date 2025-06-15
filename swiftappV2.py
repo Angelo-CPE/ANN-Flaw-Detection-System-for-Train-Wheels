@@ -1710,7 +1710,7 @@ class App(QMainWindow):
         self.inspection_page.status_animation.start()
 
     def save_report(self):
-        msg = QMessageBox()
+        msg = QMessageBox(self)
         msg.setWindowTitle("Save Report")
         msg.setText("Save this inspection report?")
         msg.setIcon(QMessageBox.Question)
@@ -1741,13 +1741,12 @@ class App(QMainWindow):
         msg.setWindowModality(Qt.ApplicationModal)
         
         # Center the message box on screen
+        msg.setWindowModality(Qt.WindowModal)
         msg.setGeometry(
-            QStyle.alignedRect(
-                Qt.LeftToRight,
-                Qt.AlignCenter,
-                msg.size(),
-                self.geometry()
-            )
+            self.geometry().center().x() - 150,
+            self.geometry().center().y() - 75,
+            300,
+            150
         )
         
         if msg.exec_() == QMessageBox.Save:
