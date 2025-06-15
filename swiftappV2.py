@@ -787,6 +787,9 @@ class InspectionPage(QWidget):
                 border: 5px solid transparent;
             }
         """)
+        
+        # Add the camera label to the layout (THIS WAS MISSING)
+        self.camera_layout.addWidget(self.camera_label)
 
         # Add real-time status indicator
         self.realtime_status_indicator = QLabel("READY")
