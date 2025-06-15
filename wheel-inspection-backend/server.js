@@ -370,7 +370,7 @@
       const verificationToken = user.getVerificationToken();
       await user.save();
 
-      const verificationUrl = `https://ann-flaw-detection-system-for-train.onrender.com/verify-account?token=${verificationToken}`;
+      const verificationUrl = `https://ann-flaw-detection-system-for-train.onrender.com/api/auth/verify?token=${verificationToken}`;
       
       const emailMessage = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0;">
