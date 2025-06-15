@@ -376,10 +376,55 @@ class CameraThread(QThread):
         finally:
             self.enable_buttons_signal.emit(True)
 
+    def preprocess_image(self, frame):
+        try:
+            # Convert to grayscale
+            frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            
+            # Center-crop to square (360x360) from 480x360
+            h, w = frame_gray.shape  # (360, 480)
+            side = min(h, w)  # 360
+            x0 = (w - side) // 2  # (480-360)//2 = 60
+            y0 = (h - side) // 2  # 0
+            square = frame_gray[y0:y0+side, x0:x0+side]  # 360x360
+            
+            # Resize to 128x128
+            square_resized = cv2.resize(square, (128, 128))
+            
+            # HOG features with training parameters
+            hog_features = hog(
+                square_resized,
+                pixels_per_cell=(16, 16),
+                cells_per_block=(2, 2),
+                visualize=False,
+                feature_vector=True,
+                block_norm='L2'
+            )
+            
+            # LMD features
+            signal = np.mean(square_resized, axis=0)
+            analytic_signal = hilbert(signal)
+            amplitude_envelope = np.abs(analytic_signal)
+            phase = np.unwrap(np.angle(analytic_signal))
+            frequency = np.diff(phase) / (2.0 * np.pi)
+            
+            # Pad frequency to 128
+            if len(frequency) < 128:
+                frequency = np.pad(frequency, (0, 128 - len(frequency)))
+            elif len(frequency) > 128:
+                frequency = frequency[:128]
+            
+            combined_features = np.concatenate([hog_features, amplitude_envelope, frequency])
+            return combined_features
+        except Exception as e:
+            print(f"Error in image preprocessing: {e}")
+            return np.zeros(2020)
+
     def run(self):
+        # Higher resolution pipeline (1280x720)
         pipeline = (
             "nvarguscamerasrc ! "
-            "video/x-raw(memory:NVMM), width=640, height=480, "
+            "video/x-raw(memory:NVMM), width=1280, height=720, "
             "format=NV12, framerate=20/1 ! "
             "nvvidconv flip-method=0 ! "
             "video/x-raw, width=480, height=360, format=BGRx ! "
@@ -399,8 +444,8 @@ class CameraThread(QThread):
             if not cap.isOpened():
                 print("Falling back to USB camera...")
                 cap = cv2.VideoCapture(0)
-                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 480)
-                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
                 cap.set(cv2.CAP_PROP_FPS, 20)
 
             if not cap.isOpened():
