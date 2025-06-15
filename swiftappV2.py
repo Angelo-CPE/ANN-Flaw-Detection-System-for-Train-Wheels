@@ -1380,13 +1380,12 @@ class App(QMainWindow):
         self.setWindowTitle("Wheel Inspection")
         self.setWindowIcon(QIcon("logo.png"))
         
-        # Add these lines before showing fullscreen
-        self.setMinimumSize(480, 800)  # Set a reasonable minimum size
-        QApplication.processEvents()  # Allow initial layout calculations
-        self.showNormal()  # Show normal first
-        QApplication.processEvents()  # Process any pending events
-        self.showFullScreen()  # Then go fullscreen
-            
+        self.setMinimumSize(480, 800)
+        QApplication.processEvents()
+        self.showNormal()
+        QApplication.processEvents()
+        self.showFullScreen()
+
         self.trainNumber = 1
         self.compartmentNumber = 1
         self.wheelNumber = 1
@@ -1394,61 +1393,55 @@ class App(QMainWindow):
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
-        
+
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.central_widget.setStyleSheet("background: white;")
-        
+
         self.main_layout = QVBoxLayout()
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
         self.central_widget.setLayout(self.main_layout)
-        
-        # Create stacked widget for pages
+
+        # Create stacked widget first so other components can use it
         self.stacked_widget = QStackedWidget()
         self.main_layout.addWidget(self.stacked_widget)
-        
-        # Create pages
+
+        # Initialize battery indicator early
+        self.battery_indicator = BatteryIndicator()
+
+        # Pages
         self.home_page = HomePage(self)
         self.selection_page = SelectionPage(self)
         self.inspection_page = InspectionPage(self)
         self.calibration_page = CalibrationPage(self)
-        
-        # Add pages to stacked widget
+
         self.stacked_widget.addWidget(self.home_page)          # Index 0
         self.stacked_widget.addWidget(self.selection_page)     # Index 1
-        self.stacked_widget.addWidget(self.inspection_page)   # Index 2
-        self.stacked_widget.addWidget(self.calibration_page)  # Index 3
-        
-        # Setup camera thread
+        self.stacked_widget.addWidget(self.inspection_page)    # Index 2
+        self.stacked_widget.addWidget(self.calibration_page)   # Index 3
+
+        # Camera thread
         self.setup_camera_thread()
-        
-        # Create battery monitor and indicator
+
+        # Battery monitor setup
         self.battery_monitor = BatteryMonitorThread()
-        self.battery_indicator = BatteryIndicator()
-        
-        # Add battery indicator to top right corner
         self.battery_indicator.setParent(self.central_widget)
         self.battery_indicator.move(self.width() - 100, 10)
-        
-        # Connect signals
         self.battery_monitor.battery_updated.connect(self.battery_indicator.update_battery)
         self.battery_monitor.battery_updated.connect(self.inspection_page.battery_indicator.update_battery)
-        
-        # Make inspection page's battery indicator visible
         self.inspection_page.battery_indicator.setVisible(True)
         self.battery_monitor.start()
+
         self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
 
     def resizeEvent(self, event):
-        # Ensure the layout stays stable during resizing
         self.battery_indicator.move(self.width() - 100, 10)
         self.stacked_widget.updateGeometry()
         self.stacked_widget.adjustSize()
         super().resizeEvent(event)
 
     def showEvent(self, event):
-        # Ensure proper layout when showing
         self.stacked_widget.updateGeometry()
         self.stacked_widget.adjustSize()
         super().showEvent(event)
