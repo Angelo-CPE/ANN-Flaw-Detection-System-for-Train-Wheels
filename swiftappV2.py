@@ -743,16 +743,18 @@ class InspectionPage(QWidget):
         self.layout.setSpacing(10)
         self.layout.addSpacing(35)
 
+        # Replace the existing camera_panel setup in InspectionPage.setup_ui
         self.camera_panel = QFrame()
-        self.camera_panel.setStyleSheet("QFrame { background: white; border: 5px solid transparent; }")
+        self.camera_panel.setStyleSheet("QFrame { background: transparent; border: none; }")
         self.camera_layout = QVBoxLayout()
-        self.camera_layout.setContentsMargins(0, 0, 0, 0)
-        
+        self.camera_layout.setContentsMargins(0, 0, 0, 0)  # Remove all margins
+        self.camera_layout.setSpacing(0)  # Remove spacing
+
         self.camera_label = QLabel()
         self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setMinimumSize(480, 360)
         self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.camera_label.setStyleSheet("QLabel { background: black; border: 5px solid transparent; }")
+        self.camera_label.setStyleSheet("QLabel { background: black; }")  # Remove border here
         self.camera_layout.addWidget(self.camera_label)
         
         self.realtime_status_indicator = QLabel("READY")
@@ -1342,6 +1344,19 @@ class App(QMainWindow):
             self.inspection_page.status_indicator.setStyleSheet("QLabel { color: black; }")
             self.inspection_page.camera_label.setStyleSheet("QLabel { border: 5px solid transparent; }")
         
+        # Update camera_label border based on status
+        border_style = ""
+        if status == "FLAW DETECTED":
+            border_style = "border: 5px solid red;"
+        elif status == "NO FLAW":
+            border_style = "border: 5px solid #00CC00;"
+        else:
+            border_style = "border: 5px solid transparent;"
+            
+        self.inspection_page.camera_label.setStyleSheet(
+            f"QLabel {{ background: black; {border_style} }}"
+        )
+        
         self.trigger_animation()
 
     def detect_flaws(self):
@@ -1361,6 +1376,8 @@ class App(QMainWindow):
             bytes_per_line = ch * w
             self.captured_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
         self.inspection_page.realtime_status_indicator.hide()
+
+        self.update_status("ANALYZING...", "")  # This will set transparent border
 
     def update_diameter(self, diameter):
         self.current_distance = diameter
@@ -1510,6 +1527,7 @@ class App(QMainWindow):
         self.captured_image = None
         self.inspection_page.realtime_status_indicator.show()
         self.camera_thread.load_model()
+        self.update_status("READY", "")  # This will set transparent border
 
     def closeEvent(self, event):
         self.camera_thread.stop()
