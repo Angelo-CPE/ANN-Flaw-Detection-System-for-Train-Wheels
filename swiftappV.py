@@ -1160,7 +1160,7 @@ class CalibrationPage(QWidget):
         """)
         self.layout.addWidget(self.title_label)
         
-         # 700mm Calibration Section
+        # 700mm Calibration Section
         self.calib_700_group = self.create_calibration_group("700 mm Train Wheel", "1st Calibration", "700mm")
         self.layout.addWidget(self.calib_700_group)
         
@@ -1263,22 +1263,20 @@ class CalibrationPage(QWidget):
             self.calib_700_reading = reading_label
             self.calib_700_button = calib_button
             self.calib_700_timestamp = timestamp_label
-            calib_button.clicked.connect(lambda: self.start_measurement("700mm"))
         elif wheel_type == "650mm":
             self.calib_650_reading = reading_label
             self.calib_650_button = calib_button
             self.calib_650_timestamp = timestamp_label
-            calib_button.clicked.connect(lambda: self.start_measurement("650mm"))
         elif wheel_type == "620mm":
             self.calib_620_reading = reading_label
             self.calib_620_button = calib_button
             self.calib_620_timestamp = timestamp_label
-            calib_button.clicked.connect(lambda: self.start_measurement("620mm"))
-        else:  # 600mm
+        elif wheel_type == "600mm":
             self.calib_600_reading = reading_label
             self.calib_600_button = calib_button
             self.calib_600_timestamp = timestamp_label
-            calib_button.clicked.connect(lambda: self.start_measurement("600mm"))
+            
+        calib_button.clicked.connect(lambda: self.start_measurement(wheel_type))
             
         layout.addWidget(calib_button)
         
@@ -1286,14 +1284,20 @@ class CalibrationPage(QWidget):
         return group
 
     def start_measurement(self, wheel_type):
-        # Disable both buttons during measurement
+        # Disable ALL buttons during measurement
         self.calib_700_button.setEnabled(False)
+        self.calib_650_button.setEnabled(False)
+        self.calib_620_button.setEnabled(False)
         self.calib_600_button.setEnabled(False)
         
-        # Clear previous readings
+        # Clear previous readings for the specific wheel type
         if wheel_type == "700mm":
             self.calib_700_reading.setText("Measuring...")
-        else:
+        elif wheel_type == "650mm":
+            self.calib_650_reading.setText("Measuring...")
+        elif wheel_type == "620mm":
+            self.calib_620_reading.setText("Measuring...")
+        elif wheel_type == "600mm":
             self.calib_600_reading.setText("Measuring...")
         
         try:
@@ -1311,20 +1315,27 @@ class CalibrationPage(QWidget):
         self.current_reading = distance
         if wheel_type == "700mm":
             self.calib_700_reading.setText(f"Distance: {distance} mm")
-        else:
+        elif wheel_type == "650mm":
+            self.calib_650_reading.setText(f"Distance: {distance} mm")
+        elif wheel_type == "620mm":
+            self.calib_620_reading.setText(f"Distance: {distance} mm")
+        elif wheel_type == "600mm":
             self.calib_600_reading.setText(f"Distance: {distance} mm")
 
     def on_measurement_complete(self, wheel_type):
         if self.current_reading is not None:
             self.calibration_values[wheel_type] = self.current_reading
-            # Update timestamp with current date and time in military format
-            current_time = time.strftime("%Y-%m-%d %H:%M")  # Changed to 24-hour format without seconds
+            current_time = time.strftime("%Y-%m-%d %H:%M")
             self.calibration_timestamps[wheel_type] = current_time
             
-            # Update the timestamp label
+            # Update the correct timestamp label
             if wheel_type == "700mm":
                 self.calib_700_timestamp.setText(f"Last calibrated: {current_time}")
-            else:
+            elif wheel_type == "650mm":
+                self.calib_650_timestamp.setText(f"Last calibrated: {current_time}")
+            elif wheel_type == "620mm":
+                self.calib_620_timestamp.setText(f"Last calibrated: {current_time}")
+            elif wheel_type == "600mm":
                 self.calib_600_timestamp.setText(f"Last calibrated: {current_time}")
                 
             self.status_label.setText(f"{wheel_type} calibrated at {self.current_reading} mm")
@@ -1332,25 +1343,30 @@ class CalibrationPage(QWidget):
             # Update the calibration constants in SerialReaderThread
             if wheel_type == "700mm":
                 SerialReaderThread.CAL_700_RAW = self.current_reading
-            else:
+            elif wheel_type == "650mm":
+                SerialReaderThread.CAL_650_RAW = self.current_reading
+            elif wheel_type == "620mm":
+                SerialReaderThread.CAL_620_RAW = self.current_reading
+            elif wheel_type == "600mm":
                 SerialReaderThread.CAL_600_RAW = self.current_reading
-                
-            # Recalculate the slope and offset
-            SerialReaderThread.M_SLOPE = (700.0 - 600.0) / (
-                SerialReaderThread.CAL_700_RAW - SerialReaderThread.CAL_600_RAW
-            )
-            SerialReaderThread.B_OFFS = 700.0 - SerialReaderThread.M_SLOPE * SerialReaderThread.CAL_700_RAW
+            
+            # Recalculate polynomial coefficients
+            SerialReaderThread.calculate_polynomial(SerialReaderThread)
             
             self.save_calibration_values()
         
-        # Re-enable buttons
+        # Re-enable ALL buttons
         self.calib_700_button.setEnabled(True)
+        self.calib_650_button.setEnabled(True)
+        self.calib_620_button.setEnabled(True)
         self.calib_600_button.setEnabled(True)
 
     def handle_serial_error(self, error_msg):
         self.status_label.setText(f"Error: {error_msg}")
-        # Re-enable buttons on error
+        # Re-enable ALL buttons on error
         self.calib_700_button.setEnabled(True)
+        self.calib_650_button.setEnabled(True)
+        self.calib_620_button.setEnabled(True)
         self.calib_600_button.setEnabled(True)
 
     def save_calibration_values(self):
@@ -1363,7 +1379,7 @@ class CalibrationPage(QWidget):
             
             # Save timestamps
             for size in ['700mm', '650mm', '620mm', '600mm']:
-                if self.calibration_timestamps[size]:
+                if self.calibration_timestamps.get(size):
                     f.write(f"{size}_timestamp: {self.calibration_timestamps[size]}\n")
 
     def load_calibration_values(self):
