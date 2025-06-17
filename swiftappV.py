@@ -1468,7 +1468,7 @@ def __init__(self):
         self.battery_monitor.start()
         self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
 
-    def resizeEvent(self, event):
+def resizeEvent(self, event):
         # Ensure the layout stays stable during resizing
         if self.battery_indicator:
             self.battery_indicator.move(self.width() - 100, 10)
@@ -1477,14 +1477,14 @@ def __init__(self):
             self.stacked_widget.adjustSize()
         super().resizeEvent(event)
 
-    def showEvent(self, event):
+def showEvent(self, event):
         # Ensure proper layout when showing
         if self.stacked_widget:
             self.stacked_widget.updateGeometry()
             self.stacked_widget.adjustSize()
         super().showEvent(event)
 
-    def setup_camera_thread(self):
+def setup_camera_thread(self):
         self.camera_thread = CameraThread()
         self.camera_thread.change_pixmap_signal.connect(self.update_image)
         self.camera_thread.status_signal.connect(self.update_status)
@@ -1495,7 +1495,7 @@ def __init__(self):
         self.camera_thread.realtime_classification_signal.connect(self.update_realtime_status)
         self.camera_thread.start()
 
-    def update_realtime_status(self, status, recommendation):
+def update_realtime_status(self, status, recommendation):
         """Update the real-time classification status in the UI"""
         self.inspection_page.realtime_status_indicator.setText(status)
         
@@ -1531,7 +1531,7 @@ def __init__(self):
                 }
             """)
 
-    def update_image(self, qt_image):
+def update_image(self, qt_image):
         if self.captured_image:
             # Display captured image if available
             self.inspection_page.camera_label.setPixmap(
@@ -1548,7 +1548,7 @@ def __init__(self):
                 Qt.SmoothTransformation
             ))
 
-    def update_status(self, status, recommendation):
+def update_status(self, status, recommendation):
         if status in ["FLAW DETECTED", "NO FLAW"]:
             if hasattr(self, 'current_distance') and self.current_distance != 680:
                 self.inspection_page.diameter_label.setText(f"Wheel Diameter: {self.current_distance} mm")
@@ -1609,7 +1609,7 @@ def __init__(self):
         
         self.trigger_animation()
 
-    def detect_flaws(self):
+def detect_flaws(self):
         self.inspection_page.status_indicator.setText("ANALYZING...")
         self.inspection_page.status_indicator.setStyleSheet("""
             QLabel {
@@ -1644,7 +1644,7 @@ def __init__(self):
         # Hide the real-time status indicator after capturing
         self.inspection_page.realtime_status_indicator.hide()
 
-    def update_diameter(self, diameter):
+def update_diameter(self, diameter):
         """Update the UI with the measured diameter"""
         self.current_distance = diameter
         diameter_text = f"Wheel Diameter: {diameter:.1f} mm"
@@ -1668,7 +1668,7 @@ def __init__(self):
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
             self.inspection_page.save_btn.setEnabled(True)
             
-    def measure_diameter(self):
+def measure_diameter(self):
         self.inspection_page.diameter_label.setText("Measuring...")
         self.inspection_page.diameter_label.show()
 
@@ -1688,12 +1688,12 @@ def __init__(self):
             print(f"Serial connection error: {e}")
             self.handle_measurement_error(f"Serial error: {str(e)}")
 
-    def handle_measurement_error(self, error_msg):  # New method to handle errors
+def handle_measurement_error(self, error_msg):  # New method to handle errors
         print(f"Measurement error: {error_msg}")
         self.inspection_page.diameter_label.setText("Measurement Error")
         self.on_diameter_measurement_complete()
 
-    def on_diameter_measurement_complete(self):  # Renamed from on_measurement_complete
+def on_diameter_measurement_complete(self):  # Renamed from on_measurement_complete
         # After measurement, show Reset and Save buttons
         self.inspection_page.detect_btn.setVisible(False)
         self.inspection_page.measure_btn.setVisible(False)
@@ -1701,7 +1701,7 @@ def __init__(self):
         self.inspection_page.save_btn.setVisible(True)
         self.inspection_page.reset_btn.setVisible(True)
 
-    def handle_test_complete(self, image, status, recommendation):
+def handle_test_complete(self, image, status, recommendation):
         # Ensure we have a valid image
         if image is None or not isinstance(image, np.ndarray) or image.size == 0:
             print("Error: Invalid image received from test")
@@ -1724,7 +1724,7 @@ def __init__(self):
         self.inspection_page.save_btn.setVisible(False)
         self.inspection_page.reset_btn.setVisible(False)
 
-    def set_buttons_enabled(self, enabled):
+def set_buttons_enabled(self, enabled):
         # Only enable measure button if we have a test result
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
             self.inspection_page.measure_btn.setEnabled(enabled)
@@ -1737,10 +1737,10 @@ def __init__(self):
         else:
             self.inspection_page.save_btn.setEnabled(False)
 
-    def trigger_animation(self):
+def trigger_animation(self):
         self.inspection_page.status_animation.start()
 
-    def save_report(self):
+def save_report(self):
         msg = QMessageBox(self)
         msg.setWindowTitle("Save Report")
         msg.setText("Save this inspection report?")
@@ -1820,7 +1820,7 @@ def __init__(self):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save report: {str(e)}")
 
-    def reset_ui(self):
+def reset_ui(self):
         self.stacked_widget.setCurrentIndex(1)  # Go back to selection page
         self.inspection_page.update_selection_label()
         self.inspection_page.status_indicator.setText("READY")
@@ -1871,7 +1871,7 @@ def __init__(self):
         # Reload the model for next use
         self.camera_thread.load_model()
 
-    def closeEvent(self, event):
+def closeEvent(self, event):
         self.camera_thread.stop()
         if hasattr(self, 'sensor_thread'):
             self.sensor_thread.stop()
