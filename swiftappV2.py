@@ -341,6 +341,7 @@ class CameraThread(QThread):
         self.last_classification = ("READY", "")  # (status, recommendation)
         self.classification_timer = QTimer()
         self.classification_timer.timeout.connect(self.classify_current_frame)
+        self.classification_timer.start(500)  # Classify every 500ms
         self.load_model()
 
     def load_model(self):
@@ -506,6 +507,7 @@ class CameraThread(QThread):
 
     def stop(self):
         self._run_flag = False
+        self.classification_timer.stop()
         self.wait()
 
 class HomePage(QWidget):
