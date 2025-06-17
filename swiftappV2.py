@@ -426,36 +426,9 @@ class CameraThread(QThread):
         self._testing = True
         self.enable_buttons_signal.emit(False)
         
-        # Process the current frame directly instead of using last_classification
-        if self.last_frame is None or self.model is None:
-            self.status_signal.emit("Error", "No frame captured or model not loaded")
-            self.enable_buttons_signal.emit(True)
-            return
+        # Simply call process_captured_image instead of direct processing
+        self.process_captured_image()
 
-        try:
-            features = self.preprocess_image(self.last_frame)
-            features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self.device)
-            
-            with torch.no_grad():
-                outputs = self.model(features_tensor)
-                _, predicted = torch.max(outputs, 1)
-            
-            if predicted.item() == 1:
-                status = "FLAW DETECTED"
-                recommendation = "For Repair/Replacement"
-            else:
-                status = "NO FLAW"
-                recommendation = "For Constant Monitoring"
-            
-            # Emit the test complete signal with the result
-            self.status_signal.emit(status, recommendation)
-            self.test_complete_signal.emit(self.last_frame, status, recommendation)
-            self.animation_signal.emit()
-        except Exception as e:
-            self.status_signal.emit("Error", f"Processing failed: {str(e)}")
-        finally:
-            self.enable_buttons_signal.emit(True)
-            
     def process_captured_image(self):
         if self.last_frame is None or self.model is None:
             self.status_signal.emit("Error", "No frame captured or model not loaded")
