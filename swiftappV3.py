@@ -9,6 +9,7 @@ import requests
 import smbus
 import serial
 from serial.tools import list_ports
+from serial import SerialException
 from ina219 import INA219
 from ina219 import DeviceRangeError
 from skimage.feature import hog
@@ -318,39 +319,53 @@ class SerialReaderThread(QThread):
         return round(self._filtered_dia)
 
     def run(self):
+        # first, try opening the port
         try:
             self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=1)
-            time.sleep(2)  # allow Arduino to wake up
+        except SerialException as e:
+            self.error_occurred.emit(f"Unable to open {self.port}: {e}")
+            self.measurement_complete.emit()
+            return
 
-            valid_diameters = []
-            start_time = time.time()
+        time.sleep(2)  # give Arduino time to boot
 
-            # ←── COLLECT for self.collection_time seconds
-            while time.time() - start_time < self.collection_time and self._run_flag:
+        valid_diams = []
+        start = time.time()
+
+        # collect for the configured duration
+        while time.time() - start < self.collection_time and self._run_flag:
+            try:
                 if self.serial_conn.in_waiting > 0:
-                    line = self.serial_conn.readline().decode('utf-8').strip()
+                    line = self.serial_conn.readline().decode('utf-8', errors='ignore').strip()
                     try:
-                        raw_mm = float(line)                     # treat incoming as raw mm
+                        raw_mm = float(line)
                         if raw_mm > 0:
-                            dia = self.calculate_diameter(raw_mm) # apply your formula
-                            valid_diameters.append(dia)
+                            dia = self.calculate_diameter(raw_mm)
+                            valid_diams.append(dia)
                             self.diameter_measured.emit(dia)
                     except ValueError:
+                        # non‑numeric line; skip
                         pass
-                time.sleep(0.005)  # tighter polling, so we catch every 200 ms frame
 
-            # Emit the median of all collected diameters
-            if valid_diameters:
-                median_d = float(np.median(valid_diameters))
-                self.diameter_measured.emit(median_d)
+                time.sleep(0.005)
 
-        except Exception as e:
-            self.error_occurred.emit(str(e))
+            except SerialException as ser_e:
+                # “device reports readiness...” error comes through here;
+                # just skip this iteration and keep going
+                continue
 
-        finally:
+        # emit the median of what we got (if anything)
+        if valid_diams:
+            self.diameter_measured.emit(float(np.median(valid_diams)))
+
+        # clean up
+        try:
             if self.serial_conn and self.serial_conn.is_open:
                 self.serial_conn.close()
-            self.measurement_complete.emit()
+        except Exception:
+            pass
+
+        self.measurement_complete.emit()
 
     def stop(self):
         self._run_flag = False
