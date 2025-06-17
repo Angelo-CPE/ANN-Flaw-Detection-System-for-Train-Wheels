@@ -341,7 +341,6 @@ class CameraThread(QThread):
         self.last_classification = ("READY", "")  # (status, recommendation)
         self.classification_timer = QTimer()
         self.classification_timer.timeout.connect(self.classify_current_frame)
-        self.classification_timer.start(500)  # Classify every 500ms
         self.load_model()
 
     def load_model(self):
@@ -425,8 +424,6 @@ class CameraThread(QThread):
     def start_test(self):
         self._testing = True
         self.enable_buttons_signal.emit(False)
-        
-        # Simply call process_captured_image instead of direct processing
         self.process_captured_image()
 
     def process_captured_image(self):
@@ -436,12 +433,30 @@ class CameraThread(QThread):
             return
 
         try:
-            status, recommendation = self.last_classification
+            # Perform classification on the current frame
+            features = self.preprocess_image(self.last_frame)
+            features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self.device)
+            
+            with torch.no_grad():
+                outputs = self.model(features_tensor)
+                _, predicted = torch.max(outputs, 1)
+            
+            if predicted.item() == 1:
+                status = "FLAW DETECTED"
+                recommendation = "For Repair/Replacement"
+            else:
+                status = "NO FLAW"
+                recommendation = "For Constant Monitoring"
+            
+            # Update last classification
+            self.last_classification = (status, recommendation)
+            
+            # Emit signals with results
             self.status_signal.emit(status, recommendation)
             self.test_complete_signal.emit(self.last_frame, status, recommendation)
             self.animation_signal.emit()
-        except Exception:
-            self.status_signal.emit("Error", "Processing failed")
+        except Exception as e:
+            self.status_signal.emit("Error", f"Processing failed: {str(e)}")
         finally:
             self.enable_buttons_signal.emit(True)
 
@@ -491,7 +506,6 @@ class CameraThread(QThread):
 
     def stop(self):
         self._run_flag = False
-        self.classification_timer.stop()
         self.wait()
 
 class HomePage(QWidget):
