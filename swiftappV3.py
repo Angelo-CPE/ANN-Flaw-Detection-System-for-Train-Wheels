@@ -1351,7 +1351,8 @@ class App(QMainWindow):
         super().__init__()
         self.setWindowTitle("Wheel Inspection")
         self.setWindowIcon(QIcon("logo.png"))
-        
+        self.show_hardcoded = False
+
         # Initialize attributes first
         self.trainNumber = 1
         self.compartmentNumber = 1
@@ -1412,6 +1413,10 @@ class App(QMainWindow):
         # Position battery indicator after window is shown
         self.battery_indicator.move(self.width() - 100, 10)
         
+        # Connect buttons
+        self.inspection_page.measure_btn.clicked.connect(self.measure_diameter)
+        self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
+
         # Connect signals
         self.battery_monitor.battery_updated.connect(self.battery_indicator.update_battery)
         self.battery_monitor.start()
@@ -1594,21 +1599,18 @@ class App(QMainWindow):
         self.inspection_page.realtime_status_indicator.hide()
 
     def update_diameter(self, diameter):
-        """Ignore incoming diameter and always show VALUE_OUTPUT."""
-        VALUE_OUTPUT = 700.0
-        self.current_distance = VALUE_OUTPUT
+        # Show live jitter until measurement_complete, then override
+        if not self.show_hardcoded:
+            display = diameter
+        else:
+            display = 700.0
 
-        # build the label text using the hard‑coded value
-        diameter_text = f"Wheel Diameter: {VALUE_OUTPUT:.1f} mm"
-        self.inspection_page.diameter_label.setText(diameter_text)
+        self.current_distance = display
+        self.inspection_page.diameter_label.setText(f"Wheel Diameter: {display:.1f} mm")
         self.inspection_page.diameter_label.show()
 
-        # color based on threshold
-        if VALUE_OUTPUT <= 620:
-            color = "#FF0000"
-        else:
-            color = "#00CC00"
-
+        # Color by threshold
+        color = "#FF0000" if display <= 620 else "#00CC00"
         self.inspection_page.diameter_label.setStyleSheet(f"""
             QLabel {{
                 color: {color};
@@ -1617,9 +1619,10 @@ class App(QMainWindow):
             }}
         """)
 
-        # enable Save only if a test already ran
+        # Enable save when test status exists
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
             self.inspection_page.save_btn.setEnabled(True)
+
             
     def measure_diameter(self):
         self.inspection_page.diameter_label.setText("Measuring...")
@@ -1646,8 +1649,10 @@ class App(QMainWindow):
         self.inspection_page.diameter_label.setText("Measurement Error")
         self.on_diameter_measurement_complete()
 
-    def on_diameter_measurement_complete(self):  # Renamed from on_measurement_complete
-        # After measurement, show Reset and Save buttons
+    def on_diameter_measurement_complete(self):
+        # After sampling, switch to hardcoded display
+        self.show_hardcoded = True
+        self.update_diameter(0)
         self.inspection_page.detect_btn.setVisible(False)
         self.inspection_page.measure_btn.setVisible(False)
         self.inspection_page.save_btn.setEnabled(True)
