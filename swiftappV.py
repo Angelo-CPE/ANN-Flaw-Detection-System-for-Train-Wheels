@@ -1367,7 +1367,38 @@ class CalibrationPage(QWidget):
             print(f"Error loading calibration values: {e}")
 
 class App(QMainWindow):
-    def __init__(self):
+    
+    def setup_calibration_ui(self):
+        from PyQt5.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox
+        self.calibration_dialog = QDialog(self)
+        self.calibration_dialog.setWindowTitle("Calibration Setup")
+        layout = QFormLayout(self.calibration_dialog)
+
+        self.sensor_inputs = [QLineEdit(self.calibration_dialog) for _ in range(4)]
+        self.diameter_inputs = [QLineEdit(self.calibration_dialog) for _ in range(4)]
+
+        for i in range(4):
+            layout.addRow(f"Sensor Reading {i+1}:", self.sensor_inputs[i])
+            layout.addRow(f"Diameter {i+1}:", self.diameter_inputs[i])
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.apply_calibration_data)
+        buttons.rejected.connect(self.calibration_dialog.reject)
+        layout.addWidget(buttons)
+        self.calibration_dialog.setLayout(layout)
+        self.calibration_dialog.exec_()
+
+    def apply_calibration_data(self):
+        try:
+            sensor_vals = [float(inp.text()) for inp in self.sensor_inputs]
+            diameter_vals = [float(inp.text()) for inp in self.diameter_inputs]
+            self.calibrator = DiameterCalibrator(sensor_vals, diameter_vals)
+            self.calibration_dialog.accept()
+        except Exception as e:
+            print(f"Calibration error: {e}")
+
+
+def __init__(self):
         super().__init__()
         self.setWindowTitle("Wheel Inspection")
         self.setWindowIcon(QIcon("logo.png"))
@@ -1891,3 +1922,16 @@ if __name__ == "__main__":
         pass
     
     sys.exit(app.exec_())
+
+
+class DiameterCalibrator:
+    def __init__(self, sensor_readings=None, diameters=None):
+        import numpy as np
+        from scipy.interpolate import interp1d
+        if sensor_readings is None or diameters is None:
+            sensor_readings = [310.5, 290.0, 260.0, 230.0]
+            diameters = [580, 620, 660, 700]
+        self.interpolator = interp1d(sensor_readings, diameters, kind='cubic', fill_value="extrapolate")
+
+    def calculate_diameter(self, raw_mm):
+        return float(self.interpolator(raw_mm))
