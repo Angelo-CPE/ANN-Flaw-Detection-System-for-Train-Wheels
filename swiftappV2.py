@@ -206,27 +206,30 @@ class CalibrationSerialThread(QThread):
 
     def run(self):
         try:
-            self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=1)
-            time.sleep(2)  # Wait for Arduino to initialize
-            
+            # ... existing setup code ...
             valid_readings = []
+            readings_window = []  # For moving average
             start_time = time.time()
             
-            # Collect readings for 2 seconds
-            while time.time() - start_time < 2.0 and self._run_flag:
+            # Collect readings for 3 seconds
+            while time.time() - start_time < 3.0 and self._run_flag:
                 if self.serial_conn.in_waiting > 0:
                     line = self.serial_conn.readline().decode('utf-8').strip()
                     try:
                         distance = float(line)
                         if distance > 0:  # Ignore error values
-                            valid_readings.append(distance)
-                            self.distance_measured.emit(distance)
+                            # Apply moving average filter
+                            readings_window.append(distance)
+                            if len(readings_window) > 3:
+                                readings_window.pop(0)
+                            filtered = sum(readings_window) / len(readings_window)
+                            valid_readings.append(filtered)
                     except ValueError:
                         pass
                 time.sleep(0.01)
                 
-            # Calculate median of valid readings
-            if valid_readings:
+            # Require at least 5 valid readings
+            if len(valid_readings) >= 5:
                 median_distance = float(np.median(valid_readings))
                 self.distance_measured.emit(median_distance)
                 
@@ -1552,15 +1555,27 @@ class App(QMainWindow):
         self.inspection_page.status_indicator.setText(status)
         self.inspection_page.recommendation_indicator.setText(recommendation)
         
-        if status == "FLAW DETECTED":
-            self.inspection_page.status_indicator.setStyleSheet("QLabel { color: red; }")
-            self.inspection_page.camera_label.setStyleSheet("QLabel { border: 5px solid red; }")
-        elif status == "NO FLAW":
-            self.inspection_page.status_indicator.setStyleSheet("QLabel { color: #00CC00; }")
-            self.inspection_page.camera_label.setStyleSheet("QLabel { border: 5px solid #00CC00; }")
-        else:
-            self.inspection_page.status_indicator.setStyleSheet("QLabel { color: black; }")
-            self.inspection_page.camera_label.setStyleSheet("QLabel { border: 5px solid transparent; }")
+        self.camera_container = QFrame()
+        self.camera_container.setStyleSheet("QFrame { background: black; border: 5px solid transparent; }")
+        self.camera_layout = QVBoxLayout(self.camera_container)
+        self.camera_layout.setContentsMargins(0, 0, 0, 0)
+        self.camera_label = QLabel()
+        self.camera_label.setAlignment(Qt.AlignCenter)
+        self.camera_label.setMinimumSize(480, 360)
+        self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.camera_label.setStyleSheet("background: transparent;")
+        self.camera_layout.addWidget(self.camera_label)
+        self.camera_layout.addWidget(self.realtime_status_indicator, alignment=Qt.AlignBottom | Qt.AlignCenter)
+        self.camera_panel_layout.addWidget(self.camera_container)  # Add container instead of label
+
+# Update border styling in App class
+def update_status(self, status, recommendation):
+    if status == "FLAW DETECTED":
+        self.inspection_page.camera_container.setStyleSheet("QFrame { background: black; border: 5px solid red; }")
+    elif status == "NO FLAW":
+        self.inspection_page.camera_container.setStyleSheet("QFrame { background: black; border: 5px solid #00CC00; }")
+    else:
+        self.inspection_page.camera_container.setStyleSheet("QFrame { background: black; border: 5px solid transparent; }")
         
         self.trigger_animation()
 
