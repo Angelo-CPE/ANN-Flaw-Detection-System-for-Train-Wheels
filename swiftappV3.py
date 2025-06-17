@@ -7,6 +7,8 @@ import torch
 import numpy as np
 import requests
 import smbus
+import serial
+from serial.tools import list_ports
 from ina219 import INA219
 from ina219 import DeviceRangeError
 from skimage.feature import hog
@@ -1625,7 +1627,7 @@ class App(QMainWindow):
 
     def _detect_serial_port(self):
         # auto-detect a ttyUSB or ttyACM port
-        ports = serial.tools.list_ports.comports()
+        ports = list_ports.comports()
         for p in ports:
             if 'ttyUSB' in p.device or 'ttyACM' in p.device:
                 return p.device
