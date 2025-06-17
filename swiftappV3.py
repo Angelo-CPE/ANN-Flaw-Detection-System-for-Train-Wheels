@@ -1623,26 +1623,32 @@ class App(QMainWindow):
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
             self.inspection_page.save_btn.setEnabled(True)
 
-            
+    def _detect_serial_port(self):
+        # auto-detect a ttyUSB or ttyACM port
+        ports = serial.tools.list_ports.comports()
+        for p in ports:
+            if 'ttyUSB' in p.device or 'ttyACM' in p.device:
+                return p.device
+        raise RuntimeError("No suitable serial port found")
+
     def measure_diameter(self):
+        # Enter live-reading mode
+        self.show_hardcoded = False
         self.inspection_page.diameter_label.setText("Measuring...")
         self.inspection_page.diameter_label.show()
-
-        # Disable all buttons during measurement
         self.inspection_page.detect_btn.setEnabled(False)
         self.inspection_page.measure_btn.setEnabled(False)
         self.inspection_page.save_btn.setEnabled(False)
 
         try:
-            self.serial_thread = SerialReaderThread()
-            self.serial_thread.diameter_measured.connect(self.update_diameter)  # Connect to the new method
-            self.serial_thread.measurement_complete.connect(self.on_diameter_measurement_complete)
-            self.serial_thread.error_occurred.connect(self.handle_measurement_error)
-            self.serial_thread.start()
-
+            port = self._detect_serial_port()
+            self.sensor_thread = SerialReaderThread(port=port, baudrate=9600)
+            self.sensor_thread.diameter_measured.connect(self.update_diameter)
+            self.sensor_thread.measurement_complete.connect(self.on_diameter_measurement_complete)
+            self.sensor_thread.error_occurred.connect(self.handle_measurement_error)
+            self.sensor_thread.start()
         except Exception as e:
-            print(f"Serial connection error: {e}")
-            self.handle_measurement_error(f"Serial error: {str(e)}")
+            self.handle_measurement_error(str(e))
 
     def handle_measurement_error(self, error_msg):  # New method to handle errors
         print(f"Measurement error: {error_msg}")
