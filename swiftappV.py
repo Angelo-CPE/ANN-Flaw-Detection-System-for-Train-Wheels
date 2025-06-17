@@ -252,8 +252,13 @@ class SerialReaderThread(QThread):
     LIFT_OFF_MM = 29.0  # sensor→lever gap when off-wheel
     
     # Calibration constants (update these with your actual calibration values)
-    CAL_700_RAW = 200.0  # gap on 700 mm ring (bigger gap)
-    CAL_600_RAW = 100.0  # gap on 600 mm ring (smaller gap)
+    CAL_700_RAW = 200.0
+    CAL_650_RAW = 160.0
+    CAL_620_RAW = 130.0
+    CAL_600_RAW = 100.0
+
+    # Polynomial coefficients storage
+    poly_coeffs = None
     
     # Calculated constants
     M_SLOPE = (700.0 - 600.0) / (CAL_700_RAW - CAL_600_RAW)
@@ -276,64 +281,67 @@ class SerialReaderThread(QThread):
             if os.path.exists("calibration_values.txt"):
                 with open("calibration_values.txt", "r") as f:
                     lines = f.readlines()
+                    calibration_map = {}
                     for line in lines:
-                        if "700mm:" in line:
-                            self.CAL_700_RAW = float(line.split(":")[1].strip())
-                        elif "600mm:" in line:
-                            self.CAL_600_RAW = float(line.split(":")[1].strip())
-                        elif "M_SLOPE:" in line:
-                            self.M_SLOPE = float(line.split(":")[1].strip())
-                        elif "B_OFFS:" in line:
-                            self.B_OFFS = float(line.split(":")[1].strip())
-                            
-                # Recalculate in case file was incomplete
-                self.M_SLOPE = (700.0 - 600.0) / (self.CAL_700_RAW - self.CAL_600_RAW)
-                self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
-                
-                print("Loaded calibration values:")
-                print(f"CAL_700_RAW: {self.CAL_700_RAW}")
-                print(f"CAL_600_RAW: {self.CAL_600_RAW}")
-                print(f"M_SLOPE: {self.M_SLOPE}")
-                print(f"B_OFFS: {self.B_OFFS}")
+                        if ":" in line:
+                            key, value = line.split(":", 1)
+                            calibration_map[key.strip()] = value.strip()
+                    
+                    # Load all 4 calibration values
+                    self.CAL_700_RAW = float(calibration_map.get("700mm", self.CAL_700_RAW))
+                    self.CAL_650_RAW = float(calibration_map.get("650mm", self.CAL_650_RAW))
+                    self.CAL_620_RAW = float(calibration_map.get("620mm", self.CAL_620_RAW))
+                    self.CAL_600_RAW = float(calibration_map.get("600mm", self.CAL_600_RAW))
+                    
+                    # Calculate polynomial coefficients
+                    self.calculate_polynomial()
+                    
+                    print("Loaded calibration values:")
+                    print(f"CAL_700_RAW: {self.CAL_700_RAW}")
+                    print(f"CAL_650_RAW: {self.CAL_650_RAW}")
+                    print(f"CAL_620_RAW: {self.CAL_620_RAW}")
+                    print(f"CAL_600_RAW: {self.CAL_600_RAW}")
         except Exception as e:
             print(f"Error loading calibration values: {e}")
-            # Fall back to defaults
-            self.CAL_700_RAW = 200.0
-            self.CAL_600_RAW = 100.0
-            self.M_SLOPE = (700.0 - 600.0) / (self.CAL_700_RAW - self.CAL_600_RAW)
-            self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
+            # Fall back to defaults and calculate
+            self.calculate_polynomial()
+
+    def calculate_polynomial(self):
+        """Calculate polynomial coefficients using 4 calibration points"""
+        try:
+            # Known diameters
+            diameters = [700.0, 650.0, 620.0, 600.0]
+            # Corresponding raw readings
+            raw_readings = [
+                self.CAL_700_RAW,
+                self.CAL_650_RAW,
+                self.CAL_620_RAW,
+                self.CAL_600_RAW
+            ]
+            
+            # Fit a cubic polynomial (degree=3) to the data
+            self.poly_coeffs = np.polyfit(raw_readings, diameters, 3)
+            print(f"Polynomial coefficients: {self.poly_coeffs}")
+        except Exception as e:
+            print(f"Error calculating polynomial: {e}")
+            self.poly_coeffs = None
 
     def calculate_diameter(self, raw_mm):
-        import math
-
-        # 1) helper: what the lever-tip gap *should* be under a known wheel diameter
-        def true_gap(dia_mm):
-            R     = dia_mm / 2.0
-            # sagitta (in mm) for a circle of radius R over a chord of length CHORD_L
-            sag   = R - math.sqrt(R*R - (self.CHORD_L*1000.0/2.0)**2)
-            # lever amplifies sagitta, then add lift-off
-            return sag * self.LEVER_GAIN + self.LIFT_OFF_MM
-
-        # 2) compute the “true” gaps for your two calibration rings
-        gap_700 = true_gap(700.0)
-        gap_600 = true_gap(600.0)
-
-        # 3) build the linear map raw_reading → gap (mm)
-        M = (gap_600 - gap_700) / (self.CAL_600_RAW - self.CAL_700_RAW)
-        B = gap_700 - M * self.CAL_700_RAW
-
-        # 4) map *this* raw to a gap
-        gap_mm = M * raw_mm + B
-
-        # 5) peel off lift-off and lever gain to get the actual sagitta (mm)
-        sag_mm = (gap_mm - self.LIFT_OFF_MM) / self.LEVER_GAIN
-        if sag_mm <= 0:
+        """Calculate diameter using polynomial regression"""
+        if self.poly_coeffs is None:
+            print("Polynomial coefficients not available, using fallback")
             return 0.0
-
-        # 6) circle formula → radius (m) → diameter (mm)
-        d_m = sag_mm / 1000.0
-        R   = (self.CHORD_L**2) / (8.0 * d_m) + d_m / 2.0
-        return R * 2000.0
+        
+        try:
+            # Evaluate polynomial: a*x^3 + b*x^2 + c*x + d
+            diameter = (self.poly_coeffs[0] * raw_mm**3 +
+                        self.poly_coeffs[1] * raw_mm**2 +
+                        self.poly_coeffs[2] * raw_mm +
+                        self.poly_coeffs[3])
+            return max(0, diameter)  # Ensure non-negative
+        except Exception as e:
+            print(f"Error in polynomial calculation: {e}")
+            return 0.0
 
     def run(self):
         try:
@@ -1096,8 +1104,8 @@ class CalibrationPage(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.setup_ui()
-        self.calibration_values = {"700mm": None, "600mm": None}
-        self.calibration_timestamps = {"700mm": None, "600mm": None}  # New dictionary for timestamps
+        self.calibration_values = {"700mm": None, "650mm": None, "620mm": None, "600mm": None}
+        self.calibration_timestamps = {"700mm": None, "650mm": None, "620mm": None, "600mm": None}
         self.current_reading = None
         self.load_calibration_values()
 
@@ -1152,12 +1160,20 @@ class CalibrationPage(QWidget):
         """)
         self.layout.addWidget(self.title_label)
         
-        # 700mm Calibration Section
-        self.calib_700_group = self.create_calibration_group("700 mm Train Wheel", "1st Calibration")
+         # 700mm Calibration Section
+        self.calib_700_group = self.create_calibration_group("700 mm Train Wheel", "1st Calibration", "700mm")
         self.layout.addWidget(self.calib_700_group)
         
+        # 650mm Calibration Section
+        self.calib_650_group = self.create_calibration_group("650 mm Train Wheel", "2nd Calibration", "650mm")
+        self.layout.addWidget(self.calib_650_group)
+        
+        # 620mm Calibration Section
+        self.calib_620_group = self.create_calibration_group("620 mm Train Wheel", "3rd Calibration", "620mm")
+        self.layout.addWidget(self.calib_620_group)
+        
         # 600mm Calibration Section
-        self.calib_600_group = self.create_calibration_group("600 mm Train Wheel", "2nd Calibration")
+        self.calib_600_group = self.create_calibration_group("600 mm Train Wheel", "4th Calibration", "600mm")
         self.layout.addWidget(self.calib_600_group)
         
         # Status Label
@@ -1176,7 +1192,7 @@ class CalibrationPage(QWidget):
         self.layout.addStretch(1)
         self.setLayout(self.layout)
 
-    def create_calibration_group(self, title, button_text):
+    def create_calibration_group(self, title, button_text, wheel_type):
         group = QFrame()
         group.setStyleSheet("QFrame { background: #f8f8f8; border-radius: 10px; }")
         layout = QVBoxLayout()
@@ -1243,15 +1259,25 @@ class CalibrationPage(QWidget):
         """)
         
         # Store references to update later
-        if "700" in title:
+        if wheel_type == "700mm":
             self.calib_700_reading = reading_label
             self.calib_700_button = calib_button
-            self.calib_700_timestamp = timestamp_label  # New reference
+            self.calib_700_timestamp = timestamp_label
             calib_button.clicked.connect(lambda: self.start_measurement("700mm"))
-        else:
+        elif wheel_type == "650mm":
+            self.calib_650_reading = reading_label
+            self.calib_650_button = calib_button
+            self.calib_650_timestamp = timestamp_label
+            calib_button.clicked.connect(lambda: self.start_measurement("650mm"))
+        elif wheel_type == "620mm":
+            self.calib_620_reading = reading_label
+            self.calib_620_button = calib_button
+            self.calib_620_timestamp = timestamp_label
+            calib_button.clicked.connect(lambda: self.start_measurement("620mm"))
+        else:  # 600mm
             self.calib_600_reading = reading_label
             self.calib_600_button = calib_button
-            self.calib_600_timestamp = timestamp_label  # New reference
+            self.calib_600_timestamp = timestamp_label
             calib_button.clicked.connect(lambda: self.start_measurement("600mm"))
             
         layout.addWidget(calib_button)
@@ -1328,18 +1354,17 @@ class CalibrationPage(QWidget):
         self.calib_600_button.setEnabled(True)
 
     def save_calibration_values(self):
-        # Save to file with the new format that includes recalculated constants and timestamps
-        print("Calibration values:", self.calibration_values)
         with open("calibration_values.txt", "w") as f:
+            # Save all 4 calibration values
             f.write(f"700mm: {self.calibration_values['700mm']}\n")
+            f.write(f"650mm: {self.calibration_values['650mm']}\n")
+            f.write(f"620mm: {self.calibration_values['620mm']}\n")
             f.write(f"600mm: {self.calibration_values['600mm']}\n")
-            f.write(f"M_SLOPE: {SerialReaderThread.M_SLOPE}\n")
-            f.write(f"B_OFFS: {SerialReaderThread.B_OFFS}\n")
-            # Save timestamps if they exist
-            if self.calibration_timestamps['700mm']:
-                f.write(f"700mm_timestamp: {self.calibration_timestamps['700mm']}\n")
-            if self.calibration_timestamps['600mm']:
-                f.write(f"600mm_timestamp: {self.calibration_timestamps['600mm']}\n")
+            
+            # Save timestamps
+            for size in ['700mm', '650mm', '620mm', '600mm']:
+                if self.calibration_timestamps[size]:
+                    f.write(f"{size}_timestamp: {self.calibration_timestamps[size]}\n")
 
     def load_calibration_values(self):
         try:
@@ -1347,58 +1372,45 @@ class CalibrationPage(QWidget):
                 with open("calibration_values.txt", "r") as f:
                     lines = f.readlines()
                     for line in lines:
-                        if "700mm:" in line and not "timestamp" in line:
-                            self.calibration_values['700mm'] = float(line.split(":")[1].strip())
+                        parts = line.split(":")
+                        if len(parts) < 2:
+                            continue
+                            
+                        key = parts[0].strip()
+                        value = parts[1].strip()
+                        
+                        # Handle calibration values
+                        if key == "700mm":
+                            self.calibration_values['700mm'] = float(value)
                             self.calib_700_reading.setText(f"Distance: {self.calibration_values['700mm']} mm")
-                        elif "600mm:" in line and not "timestamp" in line:
-                            self.calibration_values['600mm'] = float(line.split(":")[1].strip())
+                        elif key == "650mm":
+                            self.calibration_values['650mm'] = float(value)
+                            self.calib_650_reading.setText(f"Distance: {self.calibration_values['650mm']} mm")
+                        elif key == "620mm":
+                            self.calibration_values['620mm'] = float(value)
+                            self.calib_620_reading.setText(f"Distance: {self.calibration_values['620mm']} mm")
+                        elif key == "600mm":
+                            self.calibration_values['600mm'] = float(value)
                             self.calib_600_reading.setText(f"Distance: {self.calibration_values['600mm']} mm")
-                        elif "700mm_timestamp:" in line:
-                            self.calibration_timestamps['700mm'] = line.split(":")[1].strip()
-                            self.calib_700_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['700mm']}")
-                        elif "600mm_timestamp:" in line:
-                            self.calibration_timestamps['600mm'] = line.split(":")[1].strip()
-                            self.calib_600_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['600mm']}")
-                        elif "M_SLOPE:" in line:
-                            SerialReaderThread.M_SLOPE = float(line.split(":")[1].strip())
-                        elif "B_OFFS:" in line:
-                            SerialReaderThread.B_OFFS = float(line.split(":")[1].strip())
+                            
+                        # Handle timestamps
+                        elif key == "700mm_timestamp":
+                            self.calibration_timestamps['700mm'] = value
+                            self.calib_700_timestamp.setText(f"Last calibrated: {value}")
+                        elif key == "650mm_timestamp":
+                            self.calibration_timestamps['650mm'] = value
+                            self.calib_650_timestamp.setText(f"Last calibrated: {value}")
+                        elif key == "620mm_timestamp":
+                            self.calibration_timestamps['620mm'] = value
+                            self.calib_620_timestamp.setText(f"Last calibrated: {value}")
+                        elif key == "600mm_timestamp":
+                            self.calibration_timestamps['600mm'] = value
+                            self.calib_600_timestamp.setText(f"Last calibrated: {value}")
         except Exception as e:
             print(f"Error loading calibration values: {e}")
 
 class App(QMainWindow):
-    
-    def setup_calibration_ui(self):
-        from PyQt5.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox
-        self.calibration_dialog = QDialog(self)
-        self.calibration_dialog.setWindowTitle("Calibration Setup")
-        layout = QFormLayout(self.calibration_dialog)
-
-        self.sensor_inputs = [QLineEdit(self.calibration_dialog) for _ in range(4)]
-        self.diameter_inputs = [QLineEdit(self.calibration_dialog) for _ in range(4)]
-
-        for i in range(4):
-            layout.addRow(f"Sensor Reading {i+1}:", self.sensor_inputs[i])
-            layout.addRow(f"Diameter {i+1}:", self.diameter_inputs[i])
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.apply_calibration_data)
-        buttons.rejected.connect(self.calibration_dialog.reject)
-        layout.addWidget(buttons)
-        self.calibration_dialog.setLayout(layout)
-        self.calibration_dialog.exec_()
-
-    def apply_calibration_data(self):
-        try:
-            sensor_vals = [float(inp.text()) for inp in self.sensor_inputs]
-            diameter_vals = [float(inp.text()) for inp in self.diameter_inputs]
-            self.calibrator = DiameterCalibrator(sensor_vals, diameter_vals)
-            self.calibration_dialog.accept()
-        except Exception as e:
-            print(f"Calibration error: {e}")
-
-
-def __init__(self):
+    def __init__(self):
         super().__init__()
         self.setWindowTitle("Wheel Inspection")
         self.setWindowIcon(QIcon("logo.png"))
@@ -1468,7 +1480,7 @@ def __init__(self):
         self.battery_monitor.start()
         self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
 
-def resizeEvent(self, event):
+    def resizeEvent(self, event):
         # Ensure the layout stays stable during resizing
         if self.battery_indicator:
             self.battery_indicator.move(self.width() - 100, 10)
@@ -1477,14 +1489,14 @@ def resizeEvent(self, event):
             self.stacked_widget.adjustSize()
         super().resizeEvent(event)
 
-def showEvent(self, event):
+    def showEvent(self, event):
         # Ensure proper layout when showing
         if self.stacked_widget:
             self.stacked_widget.updateGeometry()
             self.stacked_widget.adjustSize()
         super().showEvent(event)
 
-def setup_camera_thread(self):
+    def setup_camera_thread(self):
         self.camera_thread = CameraThread()
         self.camera_thread.change_pixmap_signal.connect(self.update_image)
         self.camera_thread.status_signal.connect(self.update_status)
@@ -1495,7 +1507,7 @@ def setup_camera_thread(self):
         self.camera_thread.realtime_classification_signal.connect(self.update_realtime_status)
         self.camera_thread.start()
 
-def update_realtime_status(self, status, recommendation):
+    def update_realtime_status(self, status, recommendation):
         """Update the real-time classification status in the UI"""
         self.inspection_page.realtime_status_indicator.setText(status)
         
@@ -1531,7 +1543,7 @@ def update_realtime_status(self, status, recommendation):
                 }
             """)
 
-def update_image(self, qt_image):
+    def update_image(self, qt_image):
         if self.captured_image:
             # Display captured image if available
             self.inspection_page.camera_label.setPixmap(
@@ -1548,7 +1560,7 @@ def update_image(self, qt_image):
                 Qt.SmoothTransformation
             ))
 
-def update_status(self, status, recommendation):
+    def update_status(self, status, recommendation):
         if status in ["FLAW DETECTED", "NO FLAW"]:
             if hasattr(self, 'current_distance') and self.current_distance != 680:
                 self.inspection_page.diameter_label.setText(f"Wheel Diameter: {self.current_distance} mm")
@@ -1609,7 +1621,7 @@ def update_status(self, status, recommendation):
         
         self.trigger_animation()
 
-def detect_flaws(self):
+    def detect_flaws(self):
         self.inspection_page.status_indicator.setText("ANALYZING...")
         self.inspection_page.status_indicator.setStyleSheet("""
             QLabel {
@@ -1644,7 +1656,7 @@ def detect_flaws(self):
         # Hide the real-time status indicator after capturing
         self.inspection_page.realtime_status_indicator.hide()
 
-def update_diameter(self, diameter):
+    def update_diameter(self, diameter):
         """Update the UI with the measured diameter"""
         self.current_distance = diameter
         diameter_text = f"Wheel Diameter: {diameter:.1f} mm"
@@ -1668,7 +1680,7 @@ def update_diameter(self, diameter):
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
             self.inspection_page.save_btn.setEnabled(True)
             
-def measure_diameter(self):
+    def measure_diameter(self):
         self.inspection_page.diameter_label.setText("Measuring...")
         self.inspection_page.diameter_label.show()
 
@@ -1688,12 +1700,12 @@ def measure_diameter(self):
             print(f"Serial connection error: {e}")
             self.handle_measurement_error(f"Serial error: {str(e)}")
 
-def handle_measurement_error(self, error_msg):  # New method to handle errors
+    def handle_measurement_error(self, error_msg):  # New method to handle errors
         print(f"Measurement error: {error_msg}")
         self.inspection_page.diameter_label.setText("Measurement Error")
         self.on_diameter_measurement_complete()
 
-def on_diameter_measurement_complete(self):  # Renamed from on_measurement_complete
+    def on_diameter_measurement_complete(self):  # Renamed from on_measurement_complete
         # After measurement, show Reset and Save buttons
         self.inspection_page.detect_btn.setVisible(False)
         self.inspection_page.measure_btn.setVisible(False)
@@ -1701,7 +1713,7 @@ def on_diameter_measurement_complete(self):  # Renamed from on_measurement_compl
         self.inspection_page.save_btn.setVisible(True)
         self.inspection_page.reset_btn.setVisible(True)
 
-def handle_test_complete(self, image, status, recommendation):
+    def handle_test_complete(self, image, status, recommendation):
         # Ensure we have a valid image
         if image is None or not isinstance(image, np.ndarray) or image.size == 0:
             print("Error: Invalid image received from test")
@@ -1724,7 +1736,7 @@ def handle_test_complete(self, image, status, recommendation):
         self.inspection_page.save_btn.setVisible(False)
         self.inspection_page.reset_btn.setVisible(False)
 
-def set_buttons_enabled(self, enabled):
+    def set_buttons_enabled(self, enabled):
         # Only enable measure button if we have a test result
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
             self.inspection_page.measure_btn.setEnabled(enabled)
@@ -1737,10 +1749,10 @@ def set_buttons_enabled(self, enabled):
         else:
             self.inspection_page.save_btn.setEnabled(False)
 
-def trigger_animation(self):
+    def trigger_animation(self):
         self.inspection_page.status_animation.start()
 
-def save_report(self):
+    def save_report(self):
         msg = QMessageBox(self)
         msg.setWindowTitle("Save Report")
         msg.setText("Save this inspection report?")
@@ -1820,7 +1832,7 @@ def save_report(self):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save report: {str(e)}")
 
-def reset_ui(self):
+    def reset_ui(self):
         self.stacked_widget.setCurrentIndex(1)  # Go back to selection page
         self.inspection_page.update_selection_label()
         self.inspection_page.status_indicator.setText("READY")
@@ -1871,7 +1883,7 @@ def reset_ui(self):
         # Reload the model for next use
         self.camera_thread.load_model()
 
-def closeEvent(self, event):
+    def closeEvent(self, event):
         self.camera_thread.stop()
         if hasattr(self, 'sensor_thread'):
             self.sensor_thread.stop()
@@ -1922,16 +1934,3 @@ if __name__ == "__main__":
         pass
     
     sys.exit(app.exec_())
-
-
-class DiameterCalibrator:
-    def __init__(self, sensor_readings=None, diameters=None):
-        import numpy as np
-        from scipy.interpolate import interp1d
-        if sensor_readings is None or diameters is None:
-            sensor_readings = [310.5, 290.0, 260.0, 230.0]
-            diameters = [580, 620, 660, 700]
-        self.interpolator = interp1d(sensor_readings, diameters, kind='cubic', fill_value="extrapolate")
-
-    def calculate_diameter(self, raw_mm):
-        return float(self.interpolator(raw_mm))
