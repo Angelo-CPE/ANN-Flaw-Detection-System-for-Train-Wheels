@@ -587,7 +587,7 @@ class HomePage(QWidget):
         # Logo
         self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignCenter)
-        logo_pixmap = QPixmap('logoV.png')
+        logo_pixmap = QPixmap('logoV4.png')
         if not logo_pixmap.isNull():
             self.logo_label.setPixmap(logo_pixmap.scaledToHeight(100, Qt.SmoothTransformation))
         self.layout.addWidget(self.logo_label)
