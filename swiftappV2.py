@@ -332,8 +332,16 @@ class SerialReaderThread(QThread):
     def calculate_diameter(self, raw_mm):
         """Calculate diameter using polynomial regression"""
         if self.poly_coeffs is None:
-            print("Polynomial coefficients not available, using fallback")
-            return 0.0
+            # Improved fallback formula using calibration points
+            try:
+                # Calculate normalized position between min and max calibration points
+                normalized = (raw_mm - self.CAL_600_RAW) / (self.CAL_700_RAW - self.CAL_600_RAW)
+                
+                # Apply linear interpolation
+                diameter = 600.0 + normalized * (700.0 - 600.0)
+                return max(550, min(750, diameter))  # Clamp to reasonable range
+            except:
+                return 0.0
         
         try:
             # Evaluate polynomial: a*x^3 + b*x^2 + c*x + d
@@ -341,7 +349,7 @@ class SerialReaderThread(QThread):
                         self.poly_coeffs[1] * raw_mm**2 +
                         self.poly_coeffs[2] * raw_mm +
                         self.poly_coeffs[3])
-            return max(0, diameter)  # Ensure non-negative
+            return max(550, min(750, diameter))  # Clamp to reasonable range
         except Exception as e:
             print(f"Error in polynomial calculation: {e}")
             return 0.0
@@ -354,24 +362,30 @@ class SerialReaderThread(QThread):
             valid_diameters = []
             start_time = time.time()
 
-            # ←── COLLECT for self.collection_time seconds
+            # Collect for self.collection_time seconds
             while time.time() - start_time < self.collection_time and self._run_flag:
                 if self.serial_conn.in_waiting > 0:
                     line = self.serial_conn.readline().decode('utf-8').strip()
                     try:
-                        raw_mm = float(line)                     # treat incoming as raw mm
-                        if raw_mm > 0:
-                            dia = self.calculate_diameter(raw_mm) # apply your formula
+                        raw_mm = float(line)
+                        if 50 < raw_mm < 300:  # More realistic range check
+                            dia = self.calculate_diameter(raw_mm)
                             valid_diameters.append(dia)
-                            self.diameter_measured.emit(dia)
                     except ValueError:
                         pass
-                time.sleep(0.005)  # tighter polling, so we catch every 200 ms frame
+                time.sleep(0.005)
 
-            # Emit the median of all collected diameters
+            # Calculate median and mean for stability
             if valid_diameters:
-                median_d = float(np.median(valid_diameters))
-                self.diameter_measured.emit(median_d)
+                # Remove outliers
+                q1 = np.percentile(valid_diameters, 25)
+                q3 = np.percentile(valid_diameters, 75)
+                iqr = q3 - q1
+                filtered = [x for x in valid_diameters if q1 - 1.5*iqr <= x <= q3 + 1.5*iqr]
+                
+                if filtered:
+                    final_d = np.mean(filtered)  # Use mean of filtered values
+                    self.diameter_measured.emit(final_d)
 
         except Exception as e:
             self.error_occurred.emit(str(e))
@@ -890,7 +904,7 @@ class InspectionPage(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.captured_image = None  # Add this to store captured image
-        self.is_captured_mode = False  # Flag for captured image display
+        # Remove unused flag: self.is_captured_mode = False
         self.setup_ui()
         self.setup_animations()
 
@@ -902,23 +916,24 @@ class InspectionPage(QWidget):
 
         # Camera Panel - Top section
         self.camera_panel = QFrame()
-        self.camera_panel.setStyleSheet("QFrame { background: white; border: 5px solid transparent; }")
+        self.camera_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.camera_layout = QVBoxLayout()
         self.camera_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Create camera container frame
+        self.camera_container = QFrame()
+        self.camera_container.setStyleSheet("QFrame { background: black; border: 5px solid transparent; }")
+        self.camera_container_layout = QVBoxLayout(self.camera_container)
+        self.camera_container_layout.setContentsMargins(0, 0, 0, 0)
         
         self.camera_label = QLabel()
         self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setMinimumSize(480, 360)
         self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.camera_label.setStyleSheet("""
-            QLabel {
-                background: black;
-                border: 5px solid transparent;
-            }
-        """)
-        self.camera_layout.addWidget(self.camera_label)
+        self.camera_label.setStyleSheet("background: transparent;")
+        self.camera_container_layout.addWidget(self.camera_label)
         
-        # Add real-time status indicator HERE after camera_label
+        # Add real-time status indicator
         self.realtime_status_indicator = QLabel("READY")
         self.realtime_status_indicator.setAlignment(Qt.AlignCenter)
         self.realtime_status_indicator.setStyleSheet("""
@@ -929,12 +944,12 @@ class InspectionPage(QWidget):
                 padding-top: 5px;
             }
         """)
-        self.realtime_status_indicator.setVisible(True)
-        self.camera_layout.addWidget(self.realtime_status_indicator, alignment=Qt.AlignBottom | Qt.AlignCenter)
-
-        self.camera_panel.setLayout(self.camera_layout)
-        self.layout.addWidget(self.camera_panel, stretch=1)  # Camera takes more space
+        self.camera_container_layout.addWidget(self.realtime_status_indicator, alignment=Qt.AlignBottom | Qt.AlignCenter)
         
+        self.camera_layout.addWidget(self.camera_container)
+        self.camera_panel.setLayout(self.camera_layout)
+        self.layout.addWidget(self.camera_panel, stretch=1)
+
         # Control Panel - Bottom section
         self.control_panel = QFrame()
         self.control_panel.setStyleSheet("QFrame { background: white; border: none; }")
@@ -1545,7 +1560,7 @@ class App(QMainWindow):
     def update_status(self, status, recommendation):
         if status in ["FLAW DETECTED", "NO FLAW"]:
             if hasattr(self, 'current_distance') and self.current_distance != 0:
-                self.inspection_page.diameter_label.setText(f"Wheel Diameter: {self.current_distance} mm")
+                self.inspection_page.diameter_label.setText(f"Wheel Diameter: {self.current_distance:.1f} mm")
             else:
                 self.inspection_page.diameter_label.setText("Wheel Diameter: Measure Next")
             self.inspection_page.diameter_label.show()
@@ -1555,27 +1570,13 @@ class App(QMainWindow):
         self.inspection_page.status_indicator.setText(status)
         self.inspection_page.recommendation_indicator.setText(recommendation)
         
-        self.camera_container = QFrame()
-        self.camera_container.setStyleSheet("QFrame { background: black; border: 5px solid transparent; }")
-        self.camera_layout = QVBoxLayout(self.camera_container)
-        self.camera_layout.setContentsMargins(0, 0, 0, 0)
-        self.camera_label = QLabel()
-        self.camera_label.setAlignment(Qt.AlignCenter)
-        self.camera_label.setMinimumSize(480, 360)
-        self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.camera_label.setStyleSheet("background: transparent;")
-        self.camera_layout.addWidget(self.camera_label)
-        self.camera_layout.addWidget(self.realtime_status_indicator, alignment=Qt.AlignBottom | Qt.AlignCenter)
-        self.camera_panel_layout.addWidget(self.camera_container)  # Add container instead of label
-
-# Update border styling in App class
-def update_status(self, status, recommendation):
-    if status == "FLAW DETECTED":
-        self.inspection_page.camera_container.setStyleSheet("QFrame { background: black; border: 5px solid red; }")
-    elif status == "NO FLAW":
-        self.inspection_page.camera_container.setStyleSheet("QFrame { background: black; border: 5px solid #00CC00; }")
-    else:
-        self.inspection_page.camera_container.setStyleSheet("QFrame { background: black; border: 5px solid transparent; }")
+        # Update camera border based on status
+        if status == "FLAW DETECTED":
+            self.inspection_page.camera_container.setStyleSheet("QFrame { background: black; border: 5px solid red; }")
+        elif status == "NO FLAW":
+            self.inspection_page.camera_container.setStyleSheet("QFrame { background: black; border: 5px solid #00CC00; }")
+        else:
+            self.inspection_page.camera_container.setStyleSheet("QFrame { background: black; border: 5px solid transparent; }")
         
         self.trigger_animation()
 
