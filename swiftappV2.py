@@ -249,7 +249,7 @@ class SerialReaderThread(QThread):
     # Constants from Arduino code
     CHORD_L = 0.250  # metres (exact pad spacing)
     LEVER_GAIN = 3.00  # 3× mechanical amplifier
-    LIFT_OFF_MM = 50.0  # sensor→lever gap when off-wheel
+    LIFT_OFF_MM = 41.0  # sensor→lever gap when off-wheel
     
     # Calibration constants (update these with your actual calibration values)
     CAL_700_RAW = 200.0  # gap on 700 mm ring (bigger gap)
@@ -303,17 +303,38 @@ class SerialReaderThread(QThread):
             self.M_SLOPE = (700.0 - 625.0) / (self.CAL_700_RAW - self.CAL_625_RAW)
             self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
 
-    def calculate_diameter(self, raw_mm):
-        dia1, raw1 = 700.0, self.CAL_700_RAW
-        dia2, raw2 = 625.0, self.CAL_625_RAW
-        slope = (dia1 - dia2) / (raw1 - raw2)
-        offset = dia1 - slope * raw1
-        raw_dia = slope * raw_mm + offset
-        if not hasattr(self, '_filtered_dia'):
-            self._filtered_dia = raw_dia
-        alpha = 0.3
-        self._filtered_dia = alpha * raw_dia + (1 - alpha) * self._filtered_dia
-        return round(self._filtered_dia)
+        def calculate_diameter(self, raw_mm):
+            """
+            Compute diameter using dynamic two-point calibration and adaptive smoothing.
+            """
+            # dynamic slope and offset from calibration points
+            dia1, raw1 = 700.0, self.CAL_700_RAW
+            dia2, raw2 = 625.0, self.CAL_625_RAW
+            slope = (dia1 - dia2) / (raw1 - raw2)
+            offset = dia1 - slope * raw1
+
+            # adjust by baseline lift-off
+            raw_adj = raw_mm - self.LIFT_OFF_MM
+
+            # map to diameter and clamp to calibration range
+            mapped = slope * raw_adj + offset
+            mapped = max(min(mapped, dia1), dia2)
+
+            # reject large spikes
+            if hasattr(self, '_filtered_dia') and abs(mapped - self._filtered_dia) > 15:
+                mapped = self._filtered_dia
+
+            # initialize filter state
+            if not hasattr(self, '_filtered_dia'):
+                self._filtered_dia = mapped
+
+            # adaptive EMA smoothing
+            delta = abs(mapped - self._filtered_dia)
+            alpha = 0.3 if delta < 5 else 0.1
+            self._filtered_dia = alpha * mapped + (1 - alpha) * self._filtered_dia
+
+            return round(self._filtered_dia)
+
 
     def run(self):
         try:
@@ -1600,10 +1621,10 @@ class App(QMainWindow):
         self.inspection_page.diameter_label.setText(diameter_text)
         
         # Set color and font based on diameter value
-        if diameter >= 602:
-            color = "#00CC00"  # Green
-        else:
+        if diameter <= 620:
             color = "#FF0000"  # Red
+        else:
+            color = "#00CC00"# Green
             
         self.inspection_page.diameter_label.setStyleSheet(f"""
             QLabel {{

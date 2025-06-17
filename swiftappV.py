@@ -1620,10 +1620,10 @@ class App(QMainWindow):
         self.inspection_page.diameter_label.setText(diameter_text)
         
         # Set color and font based on diameter value
-        if diameter >= 602:
-            color = "#00CC00"  # Green
-        else:
+        if diameter <= 620:
             color = "#FF0000"  # Red
+        else:
+            color = "#00CC00"  # Green
             
         self.inspection_page.diameter_label.setStyleSheet(f"""
             QLabel {{
