@@ -304,37 +304,16 @@ class SerialReaderThread(QThread):
             self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
 
     def calculate_diameter(self, raw_mm):
-        """
-        Compute diameter using dynamic two-point calibration and adaptive smoothing.
-        """
-        # dynamic slope and offset from calibration points
         dia1, raw1 = 700.0, self.CAL_700_RAW
         dia2, raw2 = 625.0, self.CAL_625_RAW
         slope = (dia1 - dia2) / (raw1 - raw2)
         offset = dia1 - slope * raw1
-
-        # adjust by baseline lift-off
-        raw_adj = raw_mm - self.LIFT_OFF_MM
-
-        # map to diameter and clamp to calibration range
-        mapped = slope * raw_adj + offset
-        mapped = max(min(mapped, dia1), dia2)
-
-        # reject large spikes
-        if hasattr(self, '_filtered_dia') and abs(mapped - self._filtered_dia) > 15:
-            mapped = self._filtered_dia
-
-        # initialize filter state
+        raw_dia = slope * raw_mm + offset
         if not hasattr(self, '_filtered_dia'):
-            self._filtered_dia = mapped
-
-        # adaptive EMA smoothing
-        delta = abs(mapped - self._filtered_dia)
-        alpha = 0.3 if delta < 5 else 0.1
-        self._filtered_dia = alpha * mapped + (1 - alpha) * self._filtered_dia
-
+            self._filtered_dia = raw_dia
+        alpha = 0.3
+        self._filtered_dia = alpha * raw_dia + (1 - alpha) * self._filtered_dia
         return round(self._filtered_dia)
-
 
     def run(self):
         try:
