@@ -303,53 +303,38 @@ class SerialReaderThread(QThread):
             self.M_SLOPE = (700.0 - 625.0) / (self.CAL_700_RAW - self.CAL_625_RAW)
             self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
 
-    def get_cpu_temp(self):
-        try:
-            with open('/sys/class/thermal/thermal_zone0/temp') as f:
-                return float(f.read()) / 1000.0
-        except:
-            return None
+        def calculate_diameter(self, raw_mm):
+            """
+            Compute diameter using dynamic two-point calibration and adaptive smoothing.
+            """
+            # dynamic slope and offset from calibration points
+            dia1, raw1 = 700.0, self.CAL_700_RAW
+            dia2, raw2 = 625.0, self.CAL_625_RAW
+            slope = (dia1 - dia2) / (raw1 - raw2)
+            offset = dia1 - slope * raw1
 
-    def calculate_diameter(self, raw_mm):
-        # adjust for lift-off
-        raw_adj = raw_mm - self.LIFT_OFF_MM
+            # adjust by baseline lift-off
+            raw_adj = raw_mm - self.LIFT_OFF_MM
 
-        # calibration points: use extended lists if provided, else fallback to two-point
-        if hasattr(self, 'CAL_RAWS') and hasattr(self, 'CAL_DIAS') and len(self.CAL_RAWS) == len(self.CAL_DIAS) and len(self.CAL_RAWS) >= 2:
-            raw_points = self.CAL_RAWS
-            dia_points = self.CAL_DIAS
-        else:
-            raw_points = [self.CAL_700_RAW, self.CAL_625_RAW]
-            dia_points = [700.0, 625.0]
+            # map to diameter and clamp to calibration range
+            mapped = slope * raw_adj + offset
+            mapped = max(min(mapped, dia1), dia2)
 
-        # fit polynomial (use degree 1 for two points, else degree 2)
-        deg = 1 if len(raw_points) == 2 else 2
-        coeffs = np.polyfit(raw_points, dia_points, deg=deg)
-        mapped = np.polyval(coeffs, raw_adj)
+            # reject large spikes
+            if hasattr(self, '_filtered_dia') and abs(mapped - self._filtered_dia) > 15:
+                mapped = self._filtered_dia
 
-        # temperature compensation if configured
-        temp = self.get_cpu_temp()
-        if temp is not None and hasattr(self, 'TEMP_COEFF') and hasattr(self, 'CAL_TEMP_REF'):
-            mapped -= self.TEMP_COEFF * (temp - self.CAL_TEMP_REF)
+            # initialize filter state
+            if not hasattr(self, '_filtered_dia'):
+                self._filtered_dia = mapped
 
-        # clamp to calibration range
-        min_d, max_d = min(dia_points), max(dia_points)
-        mapped = max(min(mapped, max_d), min_d)
+            # adaptive EMA smoothing
+            delta = abs(mapped - self._filtered_dia)
+            alpha = 0.3 if delta < 5 else 0.1
+            self._filtered_dia = alpha * mapped + (1 - alpha) * self._filtered_dia
 
-        # spike rejection
-        if hasattr(self, '_filtered_dia') and abs(mapped - self._filtered_dia) > 15:
-            mapped = self._filtered_dia
+            return round(self._filtered_dia)
 
-        # initialize filter
-        if not hasattr(self, '_filtered_dia'):
-            self._filtered_dia = mapped
-
-        # adaptive EMA smoothing
-        delta = abs(mapped - self._filtered_dia)
-        alpha = 0.3 if delta < 5 else 0.1
-        self._filtered_dia = alpha * mapped + (1 - alpha) * self._filtered_dia
-
-        return round(self._filtered_dia)
 
     def run(self):
         try:
