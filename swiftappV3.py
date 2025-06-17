@@ -876,7 +876,7 @@ class InspectionPage(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.captured_image = None  # Add this to store captured image
-        self.is_captured_mode = False  # Flag for captured image display
+        self.is_captured_mode = False  # Flag for captured image
         self.setup_ui()
         self.setup_animations()
 
@@ -1620,7 +1620,7 @@ class App(QMainWindow):
         if not self.show_hardcoded:
             display = diameter
         else:
-            display = 700.0
+            display = 620.0
 
         self.current_distance = display
         self.inspection_page.diameter_label.setText(f"Wheel Diameter: {display:.1f} mm")
