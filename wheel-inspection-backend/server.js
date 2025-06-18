@@ -4,13 +4,16 @@
   const cors = require('cors');
   const bodyParser = require('body-parser');
   const WebSocket = require('ws');
+  const fs = require('fs');
+  const path = require('path');
+  const multer = require('multer');
+  const crypto = require('crypto');
   const helmet = require('helmet');
   const rateLimit = require('express-rate-limit');
   const bcrypt = require('bcryptjs');
   const jwt = require('jsonwebtoken');
   const nodemailer = require('nodemailer');
   const { body, validationResult } = require('express-validator');
-  const path = require('path');
 
   const app = express();
 
@@ -183,26 +186,33 @@
 
   const Report = mongoose.model('Report', reportSchema);
 
-  // Cloudinary
-    const cloudinary = require('cloudinary').v2;
-    const { CloudinaryStorage } = require('multer-storage-cloudinary');
-    const multer = require('multer');
-
-    cloudinary.config({
-      cloud_name: process.env.CLOUDINARY_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_SECRET
-    });
-
-    const storage = new CloudinaryStorage({
-      cloudinary,
-      params: {
-        folder: 'swift-reports', // You can change this
-        allowed_formats: ['jpg', 'jpeg', 'png']
+  // Configure storage for uploaded images
+  const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      const uploadDir = path.join(__dirname, 'uploads');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
       }
-    });
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(4).toString('hex');
+      cb(null, uniqueSuffix + ext);
+    }
+  });
 
-    const upload = multer({ storage });
+  const upload = multer({
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      if (file.mimetype.startsWith('image/')) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only image files are allowed!'), false);
+      }
+    }
+  });
 
   // WebSocket Server
   const server = app.listen(PORT, '0.0.0.0', () => {
@@ -865,6 +875,7 @@ app.get('/api/admin/users/all', protect, authorize('admin'), async (req, res) =>
       
       if (!trainNumber || !compartmentNumber || !wheelNumber || 
           !wheel_diameter || !status || !req.file) {
+        if (req.file) fs.unlinkSync(req.file.path);
         return res.status(400).json({ 
           error: 'Missing required fields',
           required: ['trainNumber', 'compartmentNumber', 'wheelNumber', 
@@ -897,7 +908,7 @@ app.get('/api/admin/users/all', protect, authorize('admin'), async (req, res) =>
         status,
         recommendation,
         name,
-        image_path: req.file.path,
+        image_path: `/uploads/${req.file.filename}`,
       });
 
       await report.save();
@@ -961,6 +972,11 @@ app.get('/api/admin/users/all', protect, authorize('admin'), async (req, res) =>
     try {
       const report = await Report.findByIdAndDelete(req.params.id);
       if (!report) return res.status(404).json({ error: 'Report not found' });
+      
+      const imagePath = path.join(__dirname, report.image_path.replace('/uploads/', 'uploads/'));
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+      }
       
       broadcastReportUpdate('deleted', report._id);
       res.json({ message: 'Report deleted' });
