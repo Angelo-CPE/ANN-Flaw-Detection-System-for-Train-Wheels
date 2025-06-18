@@ -1620,14 +1620,14 @@ class App(QMainWindow):
         if not self.show_hardcoded:
             display = diameter
         else:
-            display = 620.0
+            display = 725.0
 
         self.current_distance = display
         self.inspection_page.diameter_label.setText(f"Wheel Diameter: {display:.1f} mm")
         self.inspection_page.diameter_label.show()
 
         # Color by threshold
-        color = "#FF0000" if display <= 620 else "#00CC00"
+        color = "#FF0000" if display <= 630 else "#00CC00"
         self.inspection_page.diameter_label.setStyleSheet(f"""
             QLabel {{
                 color: {color};

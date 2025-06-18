@@ -249,14 +249,14 @@ class SerialReaderThread(QThread):
     # Constants from Arduino code
     CHORD_L = 0.250  # metres (exact pad spacing)
     LEVER_GAIN = 3.00  # 3× mechanical amplifier
-    LIFT_OFF_MM = 38.0  # sensor→lever gap when off-wheel
+    LIFT_OFF_MM = 28.0  # sensor→lever gap when off-wheel
     
     # Calibration constants (update these with your actual calibration values)
     CAL_700_RAW = 200.0  # gap on 700 mm ring (bigger gap)
-    CAL_625_RAW = 100.0  # gap on 625 mm ring (smaller gap)
+    CAL_632_RAW = 100.0  # gap on 632 mm ring (smaller gap)
     
     # Calculated constants
-    M_SLOPE = (700.0 - 625.0) / (CAL_700_RAW - CAL_625_RAW)
+    M_SLOPE = (700.0 - 632.0) / (CAL_700_RAW - CAL_632_RAW)
     B_OFFS = 700.0 - M_SLOPE * CAL_700_RAW
 
     def __init__(self, port='/dev/ttyACM0', baudrate=9600):
@@ -279,33 +279,33 @@ class SerialReaderThread(QThread):
                     for line in lines:
                         if "700mm:" in line:
                             self.CAL_700_RAW = float(line.split(":")[1].strip())
-                        elif "625mm:" in line:
-                            self.CAL_625_RAW = float(line.split(":")[1].strip())
+                        elif "632mm:" in line:
+                            self.CAL_632_RAW = float(line.split(":")[1].strip())
                         elif "M_SLOPE:" in line:
                             self.M_SLOPE = float(line.split(":")[1].strip())
                         elif "B_OFFS:" in line:
                             self.B_OFFS = float(line.split(":")[1].strip())
                             
                 # Recalculate in case file was incomplete
-                self.M_SLOPE = (700.0 - 625.0) / (self.CAL_700_RAW - self.CAL_625_RAW)
+                self.M_SLOPE = (700.0 - 632.0) / (self.CAL_700_RAW - self.CAL_632_RAW)
                 self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
                 
                 print("Loaded calibration values:")
                 print(f"CAL_700_RAW: {self.CAL_700_RAW}")
-                print(f"CAL_625_RAW: {self.CAL_625_RAW}")
+                print(f"CAL_632_RAW: {self.CAL_632_RAW}")
                 print(f"M_SLOPE: {self.M_SLOPE}")
                 print(f"B_OFFS: {self.B_OFFS}")
         except Exception as e:
             print(f"Error loading calibration values: {e}")
             # Fall back to defaults
             self.CAL_700_RAW = 200.0
-            self.CAL_625_RAW = 100.0
-            self.M_SLOPE = (700.0 - 625.0) / (self.CAL_700_RAW - self.CAL_625_RAW)
+            self.CAL_632_RAW = 100.0
+            self.M_SLOPE = (700.0 - 632.0) / (self.CAL_700_RAW - self.CAL_632_RAW)
             self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
 
     def calculate_diameter(self, raw_mm):
         dia1, raw1 = 700.0, self.CAL_700_RAW
-        dia2, raw2 = 625.0, self.CAL_625_RAW
+        dia2, raw2 = 632.0, self.CAL_632_RAW
         slope = (dia1 - dia2) / (raw1 - raw2)
         offset = dia1 - slope * raw1
         raw_dia = slope * raw_mm + offset
@@ -1076,8 +1076,8 @@ class CalibrationPage(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.setup_ui()
-        self.calibration_values = {"700mm": None, "625mm": None}
-        self.calibration_timestamps = {"700mm": None, "625mm": None}  # New dictionary for timestamps
+        self.calibration_values = {"700mm": None, "632mm": None}
+        self.calibration_timestamps = {"700mm": None, "632mm": None}  # New dictionary for timestamps
         self.current_reading = None
         self.load_calibration_values()
 
@@ -1136,9 +1136,9 @@ class CalibrationPage(QWidget):
         self.calib_700_group = self.create_calibration_group("700 mm Train Wheel", "1st Calibration")
         self.layout.addWidget(self.calib_700_group)
         
-        # 625mm Calibration Section
-        self.calib_625_group = self.create_calibration_group("625 mm Train Wheel", "2nd Calibration")
-        self.layout.addWidget(self.calib_625_group)
+        # 632mm Calibration Section
+        self.calib_632_group = self.create_calibration_group("632 mm Train Wheel", "2nd Calibration")
+        self.layout.addWidget(self.calib_632_group)
         
         # Status Label
         self.status_label = QLabel()
@@ -1229,10 +1229,10 @@ class CalibrationPage(QWidget):
             self.calib_700_timestamp = timestamp_label  # New reference
             calib_button.clicked.connect(lambda: self.start_measurement("700mm"))
         else:
-            self.calib_625_reading = reading_label
-            self.calib_625_button = calib_button
-            self.calib_625_timestamp = timestamp_label  # New reference
-            calib_button.clicked.connect(lambda: self.start_measurement("625mm"))
+            self.calib_632_reading = reading_label
+            self.calib_632_button = calib_button
+            self.calib_632_timestamp = timestamp_label  # New reference
+            calib_button.clicked.connect(lambda: self.start_measurement("632mm"))
             
         layout.addWidget(calib_button)
         
@@ -1242,13 +1242,13 @@ class CalibrationPage(QWidget):
     def start_measurement(self, wheel_type):
         # Disable both buttons during measurement
         self.calib_700_button.setEnabled(False)
-        self.calib_625_button.setEnabled(False)
+        self.calib_632_button.setEnabled(False)
         
         # Clear previous readings
         if wheel_type == "700mm":
             self.calib_700_reading.setText("Measuring...")
         else:
-            self.calib_625_reading.setText("Measuring...")
+            self.calib_632_reading.setText("Measuring...")
         
         try:
             self.serial_thread = CalibrationSerialThread()
@@ -1266,7 +1266,7 @@ class CalibrationPage(QWidget):
         if wheel_type == "700mm":
             self.calib_700_reading.setText(f"Distance: {distance} mm")
         else:
-            self.calib_625_reading.setText(f"Distance: {distance} mm")
+            self.calib_632_reading.setText(f"Distance: {distance} mm")
 
     def on_measurement_complete(self, wheel_type):
         if self.current_reading is not None:
@@ -1279,7 +1279,7 @@ class CalibrationPage(QWidget):
             if wheel_type == "700mm":
                 self.calib_700_timestamp.setText(f"Last calibrated: {current_time}")
             else:
-                self.calib_625_timestamp.setText(f"Last calibrated: {current_time}")
+                self.calib_632_timestamp.setText(f"Last calibrated: {current_time}")
                 
             self.status_label.setText(f"{wheel_type} calibrated at {self.current_reading} mm")
             
@@ -1287,11 +1287,11 @@ class CalibrationPage(QWidget):
             if wheel_type == "700mm":
                 SerialReaderThread.CAL_700_RAW = self.current_reading
             else:
-                SerialReaderThread.CAL_625_RAW = self.current_reading
+                SerialReaderThread.CAL_632_RAW = self.current_reading
                 
             # Recalculate the slope and offset
-            SerialReaderThread.M_SLOPE = (700.0 - 625.0) / (
-                SerialReaderThread.CAL_700_RAW - SerialReaderThread.CAL_625_RAW
+            SerialReaderThread.M_SLOPE = (700.0 - 632.0) / (
+                SerialReaderThread.CAL_700_RAW - SerialReaderThread.CAL_632_RAW
             )
             SerialReaderThread.B_OFFS = 700.0 - SerialReaderThread.M_SLOPE * SerialReaderThread.CAL_700_RAW
             
@@ -1299,27 +1299,27 @@ class CalibrationPage(QWidget):
         
         # Re-enable buttons
         self.calib_700_button.setEnabled(True)
-        self.calib_625_button.setEnabled(True)
+        self.calib_632_button.setEnabled(True)
 
     def handle_serial_error(self, error_msg):
         self.status_label.setText(f"Error: {error_msg}")
         # Re-enable buttons on error
         self.calib_700_button.setEnabled(True)
-        self.calib_625_button.setEnabled(True)
+        self.calib_632_button.setEnabled(True)
 
     def save_calibration_values(self):
         # Save to file with the new format that includes recalculated constants and timestamps
         print("Calibration values:", self.calibration_values)
         with open("calibration_values.txt", "w") as f:
             f.write(f"700mm: {self.calibration_values['700mm']}\n")
-            f.write(f"625mm: {self.calibration_values['625mm']}\n")
+            f.write(f"632mm: {self.calibration_values['632mm']}\n")
             f.write(f"M_SLOPE: {SerialReaderThread.M_SLOPE}\n")
             f.write(f"B_OFFS: {SerialReaderThread.B_OFFS}\n")
             # Save timestamps if they exist
             if self.calibration_timestamps['700mm']:
                 f.write(f"700mm_timestamp: {self.calibration_timestamps['700mm']}\n")
-            if self.calibration_timestamps['625mm']:
-                f.write(f"625mm_timestamp: {self.calibration_timestamps['625mm']}\n")
+            if self.calibration_timestamps['632mm']:
+                f.write(f"632mm_timestamp: {self.calibration_timestamps['632mm']}\n")
 
     def load_calibration_values(self):
         try:
@@ -1330,15 +1330,15 @@ class CalibrationPage(QWidget):
                         if "700mm:" in line and not "timestamp" in line:
                             self.calibration_values['700mm'] = float(line.split(":")[1].strip())
                             self.calib_700_reading.setText(f"Distance: {self.calibration_values['700mm']} mm")
-                        elif "625mm:" in line and not "timestamp" in line:
-                            self.calibration_values['625mm'] = float(line.split(":")[1].strip())
-                            self.calib_625_reading.setText(f"Distance: {self.calibration_values['625mm']} mm")
+                        elif "632mm:" in line and not "timestamp" in line:
+                            self.calibration_values['632mm'] = float(line.split(":")[1].strip())
+                            self.calib_632_reading.setText(f"Distance: {self.calibration_values['632mm']} mm")
                         elif "700mm_timestamp:" in line:
                             self.calibration_timestamps['700mm'] = line.split(":")[1].strip()
                             self.calib_700_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['700mm']}")
-                        elif "625mm_timestamp:" in line:
-                            self.calibration_timestamps['625mm'] = line.split(":")[1].strip()
-                            self.calib_625_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['625mm']}")
+                        elif "632mm_timestamp:" in line:
+                            self.calibration_timestamps['632mm'] = line.split(":")[1].strip()
+                            self.calib_632_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['632mm']}")
                         elif "M_SLOPE:" in line:
                             SerialReaderThread.M_SLOPE = float(line.split(":")[1].strip())
                         elif "B_OFFS:" in line:
