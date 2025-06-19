@@ -1621,7 +1621,7 @@ class App(QMainWindow):
         if not self.show_hardcoded:
             display = diameter
         else:
-            display = .0
+            display = 703.0
 
         self.current_distance = display
         self.inspection_page.diameter_label.setText(f"Wheel Diameter: {display:.1f} mm")
