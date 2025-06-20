@@ -295,6 +295,13 @@ class SerialReaderThread(QThread):
         self.collection_time = 20.0  # Increased measurement time
         self.slopes = {}
         self.offsets = {}
+
+        # Define reference_points dictionary
+        self.reference_points = {
+            "Top": {"700": self.CAL_700_TOP, "632": self.CAL_632_TOP},
+            "Side": {"700": self.CAL_700_SIDE, "632": self.CAL_632_SIDE}
+        }
+
         self.load_calibration_values()
     
     def load_calibration_values(self):
@@ -316,21 +323,10 @@ class SerialReaderThread(QThread):
             self.offsets[ang] = b
 
     def raw_to_diameter(self, raw_mm):
-        # Get reference points for current angle
-        ref = self.reference_points.get(self.angle, self.reference_points["Top"])
-        R700 = ref["700"]
-        R632 = ref["632"]
-        
-        # Calculate actual physical movement at wheel surface
-        sensor_movement_700 = R700 / self.LEVER_GAIN
-        sensor_movement_632 = R632 / self.LEVER_GAIN
-        current_movement = raw_mm / self.LEVER_GAIN
-        
-        # Calculate diameter using physical relationships
-        mm_per_movement = (700.0 - 632.0) / (sensor_movement_700 - sensor_movement_632)
-        diameter = 700.0 + mm_per_movement * (current_movement - sensor_movement_700)
-        
-        return diameter
+        # Apply angle-specific linear map
+        m = self.slopes.get(self.angle, list(self.slopes.values())[0])
+        b = self.offsets.get(self.angle, list(self.offsets.values())[0])
+        return m * raw_mm + b
 
     def run(self):
         try:
