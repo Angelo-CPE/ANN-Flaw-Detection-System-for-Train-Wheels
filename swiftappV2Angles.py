@@ -213,7 +213,7 @@ class CalibrationSerialThread(QThread):
             start_time = time.time()
             
             # Collect readings for 2 seconds
-            while time.time() - start_time < 2.0 and self._run_flag:
+            while time.time() - start_time < 10.0 and self._run_flag:
                 if self.serial_conn.in_waiting > 0:
                     line = self.serial_conn.readline().decode('utf-8').strip()
                     try:
