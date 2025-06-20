@@ -7,6 +7,7 @@ import torch
 import numpy as np
 import requests
 import smbus
+import math
 from ina219 import INA219
 from ina219 import DeviceRangeError
 from skimage.feature import hog
@@ -14,7 +15,7 @@ from scipy.signal import hilbert
 import torch.nn as nn
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
                             QPushButton, QLabel, QWidget, QFrame, QMessageBox, QSizePolicy,
-                            QGridLayout, QStackedWidget, QSlider, QStyle, QComboBox)
+                            QGridLayout, QStackedWidget, QSlider, QStyle)
 from PyQt5.QtGui import QImage, QPixmap, QFont, QColor, QPainter, QPen, QFontDatabase, QIcon
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve
 import serial
@@ -212,43 +213,22 @@ class CalibrationSerialThread(QThread):
             valid_readings = []
             start_time = time.time()
             
-            # Collect readings for 10 seconds with higher frequency
-            while time.time() - start_time < 10.0 and self._run_flag:
+            # Collect readings for 2 seconds
+            while time.time() - start_time < 2.0 and self._run_flag:
                 if self.serial_conn.in_waiting > 0:
                     line = self.serial_conn.readline().decode('utf-8').strip()
                     try:
                         distance = float(line)
-                        if 0 < distance < 500:  # More realistic range check
+                        if distance > 0:  # Ignore error values
                             valid_readings.append(distance)
                             self.distance_measured.emit(distance)
                     except ValueError:
                         pass
-                time.sleep(0.002)  # Higher sampling rate (500Hz)
+                time.sleep(0.01)
                 
-            # Improved filtering: median + moving average
+            # Calculate median of valid readings
             if valid_readings:
-                # First pass: remove outliers
-                sorted_readings = sorted(valid_readings)
-                n = len(sorted_readings)
-                if n > 10:
-                    # Remove top and bottom 10% to eliminate outliers
-                    trimmed = sorted_readings[int(n*0.1):int(n*0.9)]
-                    # Calculate median of trimmed data
-                    median_distance = float(np.median(trimmed))
-                    
-                    # Second pass: moving average around median
-                    window = []
-                    for val in valid_readings:
-                        if abs(val - median_distance) < 10:  # Only include values near median
-                            window.append(val)
-                            if len(window) > 20:  # Moving window of 20 samples
-                                window.pop(0)
-                    
-                    if window:
-                        median_distance = float(np.mean(window))
-                else:
-                    median_distance = float(np.median(valid_readings))
-                    
+                median_distance = float(np.median(valid_readings))
                 self.distance_measured.emit(median_distance)
                 
         except Exception as e:
@@ -270,128 +250,104 @@ class SerialReaderThread(QThread):
     # Constants from Arduino code
     CHORD_L = 0.250  # metres (exact pad spacing)
     LEVER_GAIN = 3.00  # 3× mechanical amplifier
-    LIFT_OFF_MM = 41.0  # sensor→lever gap when off-wheel
+    LIFT_OFF_MM = 39.0  # sensor→lever gap when off-wheel
     
-    # Calibration constants
-    CAL_700_TOP = 200.0
-    CAL_700_SIDE = 200.0
-    CAL_632_TOP = 100.0
-    CAL_632_SIDE = 100.0
+    # Calibration constants (update these with your actual calibration values)
+    CAL_700_RAW = 200.0  # gap on 700 mm ring (bigger gap)
+    CAL_632_RAW = 100.0  # gap on 632 mm ring (smaller gap)
     
-    # Calculated constants for each angle
-    M_SLOPE_TOP = (700.0 - 632.0) / (CAL_700_TOP - CAL_632_TOP)
-    B_OFFS_TOP = 700.0 - M_SLOPE_TOP * CAL_700_TOP
-    
-    M_SLOPE_SIDE = (700.0 - 632.0) / (CAL_700_SIDE - CAL_632_SIDE)
-    B_OFFS_SIDE = 700.0 - M_SLOPE_SIDE * CAL_700_SIDE
-
-    def __init__(self, port='/dev/ttyACM0', baudrate=9600, angle="Top"):
+    def __init__(self, port='/dev/ttyACM0', baudrate=9600):
         super().__init__()
         self._run_flag = True
         self.port       = port
         self.baudrate   = baudrate
-        self.angle = angle
         self.serial_conn = None
-        self.collection_time = 20.0  # Increased measurement time
-        self.slopes = {}
-        self.offsets = {}
-
-        # Define reference_points dictionary
-        self.reference_points = {
-            "Top": {"700": self.CAL_700_TOP, "632": self.CAL_632_TOP},
-            "Side": {"700": self.CAL_700_SIDE, "632": self.CAL_632_SIDE}
-        }
-
+        self.collection_time = 15.0
         self.load_calibration_values()
     
     def load_calibration_values(self):
-        # Load per-angle raw values from file
-        vals = {}
-        if os.path.exists("calibration_values.txt"):
-            with open("calibration_values.txt","r") as f:
-                for line in f:
-                    if ":" in line and "timestamp" not in line:
-                        k, v = line.split(":")
-                        vals[k.strip()] = float(v.strip())
-        # Compute slope/offset per angle
-        for ang in ["Top","Side"]:
-            r1 = vals.get(f"700_{ang}", 200.0)
-            r2 = vals.get(f"632_{ang}", 100.0)
-            m = (700.0 - 632.0) / (r1 - r2)
-            b = 700.0 - m * r1
-            self.slopes[ang] = m
-            self.offsets[ang] = b
+        try:
+            if os.path.exists("calibration_values.txt"):
+                with open("calibration_values.txt", "r") as f:
+                    lines = f.readlines()
+                    for line in lines:
+                        if "700mm:" in line:
+                            self.CAL_700_RAW = float(line.split(":")[1].strip())
+                        elif "632mm:" in line:
+                            self.CAL_632_RAW = float(line.split(":")[1].strip())
+        except Exception as e:
+            print(f"Error loading calibration values: {e}")
+            # Fall back to defaults
+            self.CAL_700_RAW = 200.0
+            self.CAL_632_RAW = 100.0
 
-    def raw_to_diameter(self, raw_mm):
-        # Apply angle-specific linear map
-        m = self.slopes.get(self.angle, list(self.slopes.values())[0])
-        b = self.offsets.get(self.angle, list(self.offsets.values())[0])
-        return m * raw_mm + b
+    def calculate_diameter(self, raw_mm):
+        # Helper function to compute expected gap for a given diameter
+        def true_gap(dia_mm):
+            R = dia_mm / 2.0
+            # Convert chord length to mm
+            chord_mm = self.CHORD_L * 1000.0
+            half_chord = chord_mm / 2.0
+            
+            # Calculate sagitta (arc height) using circle geometry
+            sag = R - math.sqrt(R*R - half_chord**2)
+            # Apply lever amplification and add lift-off distance
+            return sag * self.LEVER_GAIN + self.LIFT_OFF_MM
+
+        # Compute true gaps for calibration rings
+        gap_700 = true_gap(700.0)
+        gap_632 = true_gap(632.0)
+
+        # Build linear map: raw reading -> gap (mm)
+        M = (gap_632 - gap_700) / (self.CAL_632_RAW - self.CAL_700_RAW)
+        B = gap_700 - M * self.CAL_700_RAW
+        gap_mm = M * raw_mm + B
+
+        # Convert gap to actual sagitta (reverse lever amplification)
+        sag_mm = (gap_mm - self.LIFT_OFF_MM) / self.LEVER_GAIN
+        if sag_mm <= 0:
+            return 0.0
+
+        # Calculate radius from chord length and sagitta
+        chord_mm = self.CHORD_L * 1000.0
+        half_chord = chord_mm / 2.0
+        R = (half_chord**2) / (2 * sag_mm) + sag_mm / 2
+        
+        return R * 2  # Diameter = 2 * radius
 
     def run(self):
         try:
-            ser = serial.Serial(self.port, self.baudrate, timeout=1)
-            time.sleep(2)
-            
-            # Take 3 consecutive measurements for better accuracy
-            final_diameters = []
-            
-            for measurement_pass in range(3):
-                raw_readings = []
-                start = time.time()
-                while time.time() - start < self.collection_time / 3:
-                    if ser.in_waiting > 0:
-                        line = ser.readline().decode().strip()
-                        try:
-                            v = float(line)
-                            if 0 < v < 500:  # Realistic range check
-                                raw_readings.append(v)
-                                # Emit real-time converted value for UI
-                                d = self.raw_to_diameter(v)
-                                self.diameter_measured.emit(d)
-                        except:
-                            pass
-                    time.sleep(0.002)  # Higher sampling rate (500Hz)
-                
-                if raw_readings:
-                    # Improved filtering: remove outliers
-                    sorted_raw = sorted(raw_readings)
-                    n = len(sorted_raw)
-                    if n > 10:
-                        # Trim top and bottom 10%
-                        trimmed = sorted_raw[int(n*0.1):int(n*0.9)]
-                        median_raw = float(np.median(trimmed))
-                        
-                        # Moving average around median
-                        window = []
-                        for val in raw_readings:
-                            if abs(val - median_raw) < 10:  # Only include values near median
-                                window.append(val)
-                                if len(window) > 20:
-                                    window.pop(0)
-                        
-                        if window:
-                            median_raw = float(np.mean(window))
-                    else:
-                        median_raw = float(np.median(raw_readings))
-                    
-                    # Convert to diameter
-                    diameter = self.raw_to_diameter(median_raw)
-                    final_diameters.append(diameter)
-            
-            if final_diameters:
-                # Take median of the three measurements
-                final_diameter = float(np.median(final_diameters))
-                self.diameter_measured.emit(final_diameter)
-                
+            self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=1)
+            time.sleep(2)  # allow Arduino to wake up
+
+            valid_diameters = []
+            start_time = time.time()
+
+            # Collect readings for specified duration
+            while time.time() - start_time < self.collection_time and self._run_flag:
+                if self.serial_conn.in_waiting > 0:
+                    line = self.serial_conn.readline().decode('utf-8').strip()
+                    try:
+                        raw_mm = float(line)
+                        if raw_mm > 0:
+                            dia = self.calculate_diameter(raw_mm)
+                            valid_diameters.append(dia)
+                            self.diameter_measured.emit(dia)
+                    except ValueError:
+                        pass
+                time.sleep(0.005)
+
+            # Emit the median of all collected diameters
+            if valid_diameters:
+                median_d = float(np.median(valid_diameters))
+                self.diameter_measured.emit(median_d)
+
         except Exception as e:
             self.error_occurred.emit(str(e))
+
         finally:
-            try: 
-                if ser and ser.is_open:
-                    ser.close()
-            except: 
-                pass
+            if self.serial_conn and self.serial_conn.is_open:
+                self.serial_conn.close()
             self.measurement_complete.emit()
 
     def stop(self):
@@ -421,7 +377,6 @@ class CameraThread(QThread):
     test_complete_signal = pyqtSignal(np.ndarray, str, str)
     animation_signal = pyqtSignal()
     enable_buttons_signal = pyqtSignal(bool)
-    # New signal for real-time classification
     realtime_classification_signal = pyqtSignal(str, str)
 
     def __init__(self):
@@ -658,7 +613,7 @@ class HomePage(QWidget):
                 background-color: #b30000;
             }
         """)
-        self.inspection_btn.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(1))  # Go to AngleSelectionPage
+        self.inspection_btn.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(1))
         self.button_layout.addWidget(self.inspection_btn)
         
         # Calibration Button
@@ -680,7 +635,7 @@ class HomePage(QWidget):
                 background-color: #000;
             }
         """)
-        self.calibration_btn.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(4))  # Go to CalibrationPage
+        self.calibration_btn.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(3))
         self.button_layout.addWidget(self.calibration_btn)
         
         self.layout.addLayout(self.button_layout)
@@ -689,7 +644,7 @@ class HomePage(QWidget):
         self.layout.addStretch(1)
         self.setLayout(self.layout)
 
-class AngleSelectionPage(QWidget):
+class SelectionPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
@@ -697,11 +652,11 @@ class AngleSelectionPage(QWidget):
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(20, 5, 20, 15)
-        self.layout.setSpacing(5)
+        self.layout.setContentsMargins(20, 5, 20, 15)  # Reduced top and bottom margins
+        self.layout.setSpacing(5)   
         self.layout.addSpacing(15)
         
-        # Back Button
+        # Back Button - made more compact
         self.back_button = QPushButton("← Back")
         self.back_button.setStyleSheet("""
             QPushButton {
@@ -723,146 +678,25 @@ class AngleSelectionPage(QWidget):
                 background: #b30000;
             }
         """)
-        self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))  # Back to HomePage
+        self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(0))
         self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
         
-        # Logo
+        # Logo - reduced spacing
         self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignCenter)
         logo_pixmap = QPixmap('logo.png')
         if not logo_pixmap.isNull():
-            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(70, Qt.SmoothTransformation))
+            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(70, Qt.SmoothTransformation))  # Slightly smaller logo
         self.layout.addWidget(self.logo_label)
         
         # Main content container
         content_frame = QFrame()
         content_frame.setStyleSheet("QFrame { background: transparent; }")
         content_layout = QVBoxLayout()
-        content_layout.setContentsMargins(10, 5, 10, 5)
-        content_layout.setSpacing(10)
+        content_layout.setContentsMargins(10, 5, 10, 5)  # Reduced inner margins
+        content_layout.setSpacing(10)  # Reduced spacing
         
-        # Section title
-        section_title = QLabel("SELECT INSPECTION ANGLE")
-        section_title.setAlignment(Qt.AlignCenter)
-        section_title.setStyleSheet("""
-            QLabel {
-                font-family: 'Montserrat Bold';
-                font-size: 18px;
-                color: #333;
-                padding-bottom: 3px;
-                border-bottom: 2px solid #e60000;
-                margin-bottom: 5px;
-            }
-        """)
-        content_layout.addWidget(section_title)
-        
-        # Angle buttons
-        self.top_angle_btn = QPushButton("TOP ANGLE")
-        self.top_angle_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #e60000;
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 20px;
-                font-family: 'Montserrat Bold';
-                font-size: 20px;
-                margin: 10px;
-            }
-            QPushButton:hover {
-                background-color: #cc0000;
-            }
-            QPushButton:pressed {
-                background-color: #b30000;
-            }
-        """)
-        self.top_angle_btn.clicked.connect(lambda: self.select_angle("Top"))
-        
-        self.side_angle_btn = QPushButton("SIDE ANGLE")
-        self.side_angle_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0066cc;
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 20px;
-                font-family: 'Montserrat Bold';
-                font-size: 20px;
-                margin: 10px;
-            }
-            QPushButton:hover {
-                background-color: #0055aa;
-            }
-            QPushButton:pressed {
-                background-color: #004488;
-            }
-        """)
-        self.side_angle_btn.clicked.connect(lambda: self.select_angle("Side"))
-        
-        content_layout.addWidget(self.top_angle_btn)
-        content_layout.addWidget(self.side_angle_btn)
-        
-        content_frame.setLayout(content_layout)
-        self.layout.addWidget(content_frame, stretch=1)
-        self.setLayout(self.layout)
-    
-    def select_angle(self, angle):
-        self.parent.angle = angle
-        self.parent.stacked_widget.setCurrentIndex(2)  # Go to WheelSelectionPage
-
-class WheelSelectionPage(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.parent = parent
-        self.setup_ui()
-
-    def setup_ui(self):
-        self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(20, 5, 20, 15)
-        self.layout.setSpacing(5)
-        self.layout.addSpacing(15)
-        
-        # Back Button
-        self.back_button = QPushButton("← Back")
-        self.back_button.setStyleSheet("""
-            QPushButton {
-                background: #f0f0f0;
-                color: #333;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 5px 10px;
-                font-family: 'Montserrat SemiBold';
-                font-size: 14px;
-                min-width: 70px;
-            }
-            QPushButton:hover {
-                background: #e60000;
-                color: white;
-                border-color: #e60000;
-            }
-            QPushButton:pressed {
-                background: #b30000;
-            }
-        """)
-        self.back_button.clicked.connect(lambda: self.parent.stacked_widget.setCurrentIndex(1))  # Back to AngleSelectionPage
-        self.layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
-        
-        # Logo
-        self.logo_label = QLabel()
-        self.logo_label.setAlignment(Qt.AlignCenter)
-        logo_pixmap = QPixmap('logo.png')
-        if not logo_pixmap.isNull():
-            self.logo_label.setPixmap(logo_pixmap.scaledToHeight(70, Qt.SmoothTransformation))
-        self.layout.addWidget(self.logo_label)
-        
-        # Main content container
-        content_frame = QFrame()
-        content_frame.setStyleSheet("QFrame { background: transparent; }")
-        content_layout = QVBoxLayout()
-        content_layout.setContentsMargins(10, 5, 10, 5)
-        content_layout.setSpacing(10)
-        
-        # Section title
+        # Section title - made more compact
         section_title = QLabel("SELECT INSPECTION DETAILS")
         section_title.setAlignment(Qt.AlignCenter)
         section_title.setStyleSheet("""
@@ -877,9 +711,9 @@ class WheelSelectionPage(QWidget):
         """)
         content_layout.addWidget(section_title)
         
-        # Train Selection
+        # Train Selection - reduced spacing
         self.train_layout = QVBoxLayout()
-        self.train_layout.setSpacing(2)
+        self.train_layout.setSpacing(2)  # Reduced from 0 to 2 for slight separation
         self.train_label = QLabel("Train Number")
         self.train_label.setStyleSheet("""
             QLabel {
@@ -926,7 +760,7 @@ class WheelSelectionPage(QWidget):
         self.train_layout.addWidget(self.train_value)
         content_layout.addLayout(self.train_layout)
         
-        # Compartment Selection
+        # Compartment Selection - reduced spacing
         self.compartment_layout = QVBoxLayout()
         self.compartment_layout.setSpacing(2)
         self.compartment_label = QLabel("Compartment Number")
@@ -952,7 +786,7 @@ class WheelSelectionPage(QWidget):
         self.compartment_layout.addWidget(self.compartment_value)
         content_layout.addLayout(self.compartment_layout)
         
-        # Wheel Selection
+        # Wheel Selection - reduced spacing
         self.wheel_layout = QVBoxLayout()
         self.wheel_layout.setSpacing(2)
         self.wheel_label = QLabel("Wheel Number")
@@ -978,7 +812,7 @@ class WheelSelectionPage(QWidget):
         self.wheel_layout.addWidget(self.wheel_value)
         content_layout.addLayout(self.wheel_layout)
         
-        # Start Button
+        # Start Button - same size but with reduced top margin
         self.start_button = QPushButton("START INSPECTION")
         self.start_button.setStyleSheet("""
             QPushButton {
@@ -1017,14 +851,14 @@ class WheelSelectionPage(QWidget):
         self.parent.wheelNumber = self.wheel_slider.value()
         # Update the inspection page's selection label
         self.parent.inspection_page.update_selection_label()
-        self.parent.stacked_widget.setCurrentIndex(3)  # Go to InspectionPage
+        self.parent.stacked_widget.setCurrentIndex(2)
 
 class InspectionPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
-        self.captured_image = None
-        self.is_captured_mode = False
+        self.captured_image = None  # Add this to store captured image
+        self.is_captured_mode = False  # Flag for captured image display
         self.setup_ui()
         self.setup_animations()
 
@@ -1034,7 +868,7 @@ class InspectionPage(QWidget):
         self.layout.setSpacing(10)
         self.layout.addSpacing(35)
 
-        # Camera Panel
+        # Camera Panel - Top section
         self.camera_panel = QFrame()
         self.camera_panel.setStyleSheet("QFrame { background: white; border: 5px solid transparent; }")
         self.camera_layout = QVBoxLayout()
@@ -1052,7 +886,7 @@ class InspectionPage(QWidget):
         """)
         self.camera_layout.addWidget(self.camera_label)
         
-        # Real-time status indicator
+        # Add real-time status indicator HERE after camera_label
         self.realtime_status_indicator = QLabel("READY")
         self.realtime_status_indicator.setAlignment(Qt.AlignCenter)
         self.realtime_status_indicator.setStyleSheet("""
@@ -1067,9 +901,9 @@ class InspectionPage(QWidget):
         self.camera_layout.addWidget(self.realtime_status_indicator, alignment=Qt.AlignBottom | Qt.AlignCenter)
 
         self.camera_panel.setLayout(self.camera_layout)
-        self.layout.addWidget(self.camera_panel, stretch=1)
+        self.layout.addWidget(self.camera_panel, stretch=1)  # Camera takes more space
         
-        # Control Panel
+        # Control Panel - Bottom section
         self.control_panel = QFrame()
         self.control_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.control_layout = QVBoxLayout()
@@ -1152,7 +986,7 @@ class InspectionPage(QWidget):
         self.status_panel.setLayout(self.status_layout)
         self.control_layout.addWidget(self.status_panel)
         
-        # Button Panel
+        # Button Panel - Horizontal layout for buttons
         self.button_panel = QFrame()
         self.button_panel.setStyleSheet("QFrame { background: white; border: none; }")
         self.button_layout = QHBoxLayout()
@@ -1213,7 +1047,7 @@ class InspectionPage(QWidget):
         self.control_layout.addWidget(self.button_panel)
         
         self.control_panel.setLayout(self.control_layout)
-        self.layout.addWidget(self.control_panel, stretch=0)
+        self.layout.addWidget(self.control_panel, stretch=0)  # Control panel takes less space
         
         self.setLayout(self.layout)
         
@@ -1227,8 +1061,7 @@ class InspectionPage(QWidget):
         self.selection_label.setText(
             f"Train: {self.parent.trainNumber} | "
             f"Compartment: {self.parent.compartmentNumber} | "
-            f"Wheel: {self.parent.wheelNumber} | "
-            f"Angle: {self.parent.angle}"
+            f"Wheel: {self.parent.wheelNumber}"
         )
 
     def setup_animations(self):
@@ -1242,19 +1075,8 @@ class CalibrationPage(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.setup_ui()
-        # Initialize calibration values for all four combinations
-        self.calibration_values = {
-            "700_Top": None,
-            "700_Side": None,
-            "632_Top": None,
-            "632_Side": None
-        }
-        self.calibration_timestamps = {
-            "700_Top": None,
-            "700_Side": None,
-            "632_Top": None,
-            "632_Side": None
-        }
+        self.calibration_values = {"700mm": None, "632mm": None}
+        self.calibration_timestamps = {"700mm": None, "632mm": None}  # New dictionary for timestamps
         self.current_reading = None
         self.load_calibration_values()
 
@@ -1309,28 +1131,13 @@ class CalibrationPage(QWidget):
         """)
         self.layout.addWidget(self.title_label)
         
-        # Grid for calibration groups
-        grid_layout = QGridLayout()
-        grid_layout.setContentsMargins(10, 10, 10, 10)
-        grid_layout.setSpacing(15)
+        # 700mm Calibration Section
+        self.calib_700_group = self.create_calibration_group("700 mm Train Wheel", "1st Calibration")
+        self.layout.addWidget(self.calib_700_group)
         
-        # 700mm Top Angle Calibration
-        self.calib_700_top_group = self.create_calibration_group("700 mm Top Angle", "1st Calibration")
-        grid_layout.addWidget(self.calib_700_top_group, 0, 0)
-        
-        # 700mm Side Angle Calibration
-        self.calib_700_side_group = self.create_calibration_group("700 mm Side Angle", "2nd Calibration")
-        grid_layout.addWidget(self.calib_700_side_group, 0, 1)
-        
-        # 632mm Top Angle Calibration
-        self.calib_632_top_group = self.create_calibration_group("632 mm Top Angle", "3rd Calibration")
-        grid_layout.addWidget(self.calib_632_top_group, 1, 0)
-        
-        # 632mm Side Angle Calibration
-        self.calib_632_side_group = self.create_calibration_group("632 mm Side Angle", "4th Calibration")
-        grid_layout.addWidget(self.calib_632_side_group, 1, 1)
-        
-        self.layout.addLayout(grid_layout)
+        # 632mm Calibration Section
+        self.calib_632_group = self.create_calibration_group("632 mm Train Wheel", "2nd Calibration")
+        self.layout.addWidget(self.calib_632_group)
         
         # Status Label
         self.status_label = QLabel()
@@ -1377,7 +1184,7 @@ class CalibrationPage(QWidget):
         """)
         layout.addWidget(reading_label, alignment=Qt.AlignCenter)
         
-        # Last Calibration Timestamp
+        # Last Calibration Timestamp (new)
         timestamp_label = QLabel("Last calibrated: Never")
         timestamp_label.setStyleSheet("""
             QLabel {
@@ -1415,53 +1222,37 @@ class CalibrationPage(QWidget):
         """)
         
         # Store references to update later
-        if "700 mm Top" in title:
-            self.calib_700_top_reading = reading_label
-            self.calib_700_top_button = calib_button
-            self.calib_700_top_timestamp = timestamp_label
-            calib_button.clicked.connect(lambda: self.start_measurement("700_Top"))
-        elif "700 mm Side" in title:
-            self.calib_700_side_reading = reading_label
-            self.calib_700_side_button = calib_button
-            self.calib_700_side_timestamp = timestamp_label
-            calib_button.clicked.connect(lambda: self.start_measurement("700_Side"))
-        elif "632 mm Top" in title:
-            self.calib_632_top_reading = reading_label
-            self.calib_632_top_button = calib_button
-            self.calib_632_top_timestamp = timestamp_label
-            calib_button.clicked.connect(lambda: self.start_measurement("632_Top"))
-        else:  # "632 mm Side"
-            self.calib_632_side_reading = reading_label
-            self.calib_632_side_button = calib_button
-            self.calib_632_side_timestamp = timestamp_label
-            calib_button.clicked.connect(lambda: self.start_measurement("632_Side"))
+        if "700" in title:
+            self.calib_700_reading = reading_label
+            self.calib_700_button = calib_button
+            self.calib_700_timestamp = timestamp_label  # New reference
+            calib_button.clicked.connect(lambda: self.start_measurement("700mm"))
+        else:
+            self.calib_632_reading = reading_label
+            self.calib_632_button = calib_button
+            self.calib_632_timestamp = timestamp_label  # New reference
+            calib_button.clicked.connect(lambda: self.start_measurement("632mm"))
             
         layout.addWidget(calib_button)
         
         group.setLayout(layout)
         return group
 
-    def start_measurement(self, calib_type):
-        # Disable all buttons during measurement
-        self.calib_700_top_button.setEnabled(False)
-        self.calib_700_side_button.setEnabled(False)
-        self.calib_632_top_button.setEnabled(False)
-        self.calib_632_side_button.setEnabled(False)
+    def start_measurement(self, wheel_type):
+        # Disable both buttons during measurement
+        self.calib_700_button.setEnabled(False)
+        self.calib_632_button.setEnabled(False)
         
-        # Update UI for the specific calibration type
-        if calib_type == "700_Top":
-            self.calib_700_top_reading.setText("Measuring...")
-        elif calib_type == "700_Side":
-            self.calib_700_side_reading.setText("Measuring...")
-        elif calib_type == "632_Top":
-            self.calib_632_top_reading.setText("Measuring...")
-        else:  # "632_Side"
-            self.calib_632_side_reading.setText("Measuring...")
+        # Clear previous readings
+        if wheel_type == "700mm":
+            self.calib_700_reading.setText("Measuring...")
+        else:
+            self.calib_632_reading.setText("Measuring...")
         
         try:
             self.serial_thread = CalibrationSerialThread()
-            self.serial_thread.distance_measured.connect(lambda dist: self.update_reading(calib_type, dist))
-            self.serial_thread.measurement_complete.connect(lambda: self.on_measurement_complete(calib_type))
+            self.serial_thread.distance_measured.connect(lambda dist: self.update_reading(wheel_type, dist))
+            self.serial_thread.measurement_complete.connect(lambda: self.on_measurement_complete(wheel_type))
             self.serial_thread.error_occurred.connect(self.handle_serial_error)
             self.serial_thread.start()
 
@@ -1469,90 +1260,57 @@ class CalibrationPage(QWidget):
             print(f"Serial connection error: {e}")
             self.handle_serial_error(f"Serial error: {str(e)}")
 
-    def update_reading(self, calib_type, distance):
+    def update_reading(self, wheel_type, distance):
         self.current_reading = distance
-        # Format to 2 decimal places for display
-        formatted_distance = f"{distance:.2f}"
-        if calib_type == "700_Top":
-            self.calib_700_top_reading.setText(f"Distance: {formatted_distance} mm")
-        elif calib_type == "700_Side":
-            self.calib_700_side_reading.setText(f"Distance: {formatted_distance} mm")
-        elif calib_type == "632_Top":
-            self.calib_632_top_reading.setText(f"Distance: {formatted_distance} mm")
-        else:  # "632_Side"
-            self.calib_632_side_reading.setText(f"Distance: {formatted_distance} mm")
+        if wheel_type == "700mm":
+            self.calib_700_reading.setText(f"Distance: {distance} mm")
+        else:
+            self.calib_632_reading.setText(f"Distance: {distance} mm")
 
-    def on_measurement_complete(self, calib_type):
+    def on_measurement_complete(self, wheel_type):
         if self.current_reading is not None:
-            self.calibration_values[calib_type] = self.current_reading
-            current_time = time.strftime("%Y-%m-%d %H:%M")
-            self.calibration_timestamps[calib_type] = current_time
+            self.calibration_values[wheel_type] = self.current_reading
+            # Update timestamp with current date and time in military format
+            current_time = time.strftime("%Y-%m-%d %H:%M")  # Changed to 24-hour format without seconds
+            self.calibration_timestamps[wheel_type] = current_time
             
             # Update the timestamp label
-            if calib_type == "700_Top":
-                self.calib_700_top_timestamp.setText(f"Last calibrated: {current_time}")
-            elif calib_type == "700_Side":
-                self.calib_700_side_timestamp.setText(f"Last calibrated: {current_time}")
-            elif calib_type == "632_Top":
-                self.calib_632_top_timestamp.setText(f"Last calibrated: {current_time}")
-            else:  # "632_Side"
-                self.calib_632_side_timestamp.setText(f"Last calibrated: {current_time}")
+            if wheel_type == "700mm":
+                self.calib_700_timestamp.setText(f"Last calibrated: {current_time}")
+            else:
+                self.calib_632_timestamp.setText(f"Last calibrated: {current_time}")
                 
-            self.status_label.setText(f"{calib_type.replace('_', ' ')} calibrated at {self.current_reading} mm")
+            self.status_label.setText(f"{wheel_type} calibrated at {self.current_reading} mm")
             
             # Update the calibration constants in SerialReaderThread
-            if calib_type == "700_Top":
-                SerialReaderThread.CAL_700_TOP = self.current_reading
-            elif calib_type == "700_Side":
-                SerialReaderThread.CAL_700_SIDE = self.current_reading
-            elif calib_type == "632_Top":
-                SerialReaderThread.CAL_632_TOP = self.current_reading
-            else:  # "632_Side"
-                SerialReaderThread.CAL_632_SIDE = self.current_reading
+            if wheel_type == "700mm":
+                SerialReaderThread.CAL_700_RAW = self.current_reading
+            else:
+                SerialReaderThread.CAL_632_RAW = self.current_reading
                 
-            # Recalculate the slopes and offsets
-            SerialReaderThread.M_SLOPE_TOP = (700.0 - 632.0) / (
-                SerialReaderThread.CAL_700_TOP - SerialReaderThread.CAL_632_TOP
-            )
-            SerialReaderThread.B_OFFS_TOP = 700.0 - SerialReaderThread.M_SLOPE_TOP * SerialReaderThread.CAL_700_TOP
-            
-            SerialReaderThread.M_SLOPE_SIDE = (700.0 - 632.0) / (
-                SerialReaderThread.CAL_700_SIDE - SerialReaderThread.CAL_632_SIDE
-            )
-            SerialReaderThread.B_OFFS_SIDE = 700.0 - SerialReaderThread.M_SLOPE_SIDE * SerialReaderThread.CAL_700_SIDE
-            
             self.save_calibration_values()
         
         # Re-enable buttons
-        self.calib_700_top_button.setEnabled(True)
-        self.calib_700_side_button.setEnabled(True)
-        self.calib_632_top_button.setEnabled(True)
-        self.calib_632_side_button.setEnabled(True)
+        self.calib_700_button.setEnabled(True)
+        self.calib_632_button.setEnabled(True)
 
     def handle_serial_error(self, error_msg):
         self.status_label.setText(f"Error: {error_msg}")
         # Re-enable buttons on error
-        self.calib_700_top_button.setEnabled(True)
-        self.calib_700_side_button.setEnabled(True)
-        self.calib_632_top_button.setEnabled(True)
-        self.calib_632_side_button.setEnabled(True)
+        self.calib_700_button.setEnabled(True)
+        self.calib_632_button.setEnabled(True)
 
     def save_calibration_values(self):
+        # Save to file with the new format that includes recalculated constants and timestamps
         print("Calibration values:", self.calibration_values)
         with open("calibration_values.txt", "w") as f:
-            f.write(f"700_Top: {self.calibration_values['700_Top']}\n")
-            f.write(f"700_Side: {self.calibration_values['700_Side']}\n")
-            f.write(f"632_Top: {self.calibration_values['632_Top']}\n")
-            f.write(f"632_Side: {self.calibration_values['632_Side']}\n")
-            f.write(f"M_SLOPE_TOP: {SerialReaderThread.M_SLOPE_TOP}\n")
-            f.write(f"B_OFFS_TOP: {SerialReaderThread.B_OFFS_TOP}\n")
-            f.write(f"M_SLOPE_SIDE: {SerialReaderThread.M_SLOPE_SIDE}\n")
-            f.write(f"B_OFFS_SIDE: {SerialReaderThread.B_OFFS_SIDE}\n")
-            
-            # Save timestamps
-            for calib_type, timestamp in self.calibration_timestamps.items():
-                if timestamp:
-                    f.write(f"{calib_type}_timestamp: {timestamp}\n")
+            f.write(f"700mm: {self.calibration_values['700mm']}\n")
+            f.write(f"632mm: {self.calibration_values['632mm']}\n")
+            # Save timestamps if they exist
+            if self.calibration_timestamps['700mm']:
+                f.write(f"700mm_timestamp: {self.calibration_timestamps['700mm']}\n")
+            if self.calibration_timestamps['632mm']:
+                f.write(f"632mm_timestamp: {self.calibration_timestamps['632mm']}\n")
 
     def load_calibration_values(self):
         try:
@@ -1560,42 +1318,28 @@ class CalibrationPage(QWidget):
                 with open("calibration_values.txt", "r") as f:
                     lines = f.readlines()
                     for line in lines:
-                        if "700_Top:" in line and not "timestamp" in line:
-                            value = float(line.split(":")[1].strip())
-                            self.calibration_values['700_Top'] = value
-                            # Format to 2 decimal places for display
-                            self.calib_700_top_reading.setText(f"Distance: {value:.2f} mm")
-                        elif "700_Side:" in line and not "timestamp" in line:
-                            value = float(line.split(":")[1].strip())
-                            self.calibration_values['700_Side'] = value
-                            self.calib_700_side_reading.setText(f"Distance: {value:.2f} mm")
-                        elif "632_Top:" in line and not "timestamp" in line:
-                            value = float(line.split(":")[1].strip())
-                            self.calibration_values['632_Top'] = value
-                            self.calib_632_top_reading.setText(f"Distance: {value:.2f} mm")
-                        elif "632_Side:" in line and not "timestamp" in line:
-                            value = float(line.split(":")[1].strip())
-                            self.calibration_values['632_Side'] = value
-                            self.calib_632_side_reading.setText(f"Distance: {value:.2f} mm")
-                        elif "M_SLOPE_TOP:" in line:
-                            SerialReaderThread.M_SLOPE_TOP = float(line.split(":")[1].strip())
-                        elif "B_OFFS_TOP:" in line:
-                            SerialReaderThread.B_OFFS_TOP = float(line.split(":")[1].strip())
-                        elif "M_SLOPE_SIDE:" in line:
-                            SerialReaderThread.M_SLOPE_SIDE = float(line.split(":")[1].strip())
-                        elif "B_OFFS_SIDE:" in line:
-                            SerialReaderThread.B_OFFS_SIDE = float(line.split(":")[1].strip())
+                        if "700mm:" in line and not "timestamp" in line:
+                            self.calibration_values['700mm'] = float(line.split(":")[1].strip())
+                            self.calib_700_reading.setText(f"Distance: {self.calibration_values['700mm']} mm")
+                        elif "632mm:" in line and not "timestamp" in line:
+                            self.calibration_values['632mm'] = float(line.split(":")[1].strip())
+                            self.calib_632_reading.setText(f"Distance: {self.calibration_values['632mm']} mm")
+                        elif "700mm_timestamp:" in line:
+                            self.calibration_timestamps['700mm'] = line.split(":")[1].strip()
+                            self.calib_700_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['700mm']}")
+                        elif "632mm_timestamp:" in line:
+                            self.calibration_timestamps['632mm'] = line.split(":")[1].strip()
+                            self.calib_632_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['632mm']}")
         except Exception as e:
             print(f"Error loading calibration values: {e}")
 
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.angle = "Top"  # Default angle
         self.setWindowTitle("Wheel Inspection")
         self.setWindowIcon(QIcon("logo.png"))
         
-        # Initialize attributes
+        # Initialize attributes first
         self.trainNumber = 1
         self.compartmentNumber = 1
         self.wheelNumber = 1
@@ -1603,9 +1347,9 @@ class App(QMainWindow):
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
-        self.captured_image = None
+        self.captured_image = None  # Add this to store captured image
         
-        # Initialize UI components
+        # Initialize UI components to avoid attribute errors
         self.battery_indicator = None
         self.stacked_widget = None
         
@@ -1625,17 +1369,15 @@ class App(QMainWindow):
         
         # Create pages
         self.home_page = HomePage(self)
-        self.angle_selection_page = AngleSelectionPage(self)  # New page for angle selection
-        self.wheel_selection_page = WheelSelectionPage(self)  # Renamed from selection_page
+        self.selection_page = SelectionPage(self)
         self.inspection_page = InspectionPage(self)
         self.calibration_page = CalibrationPage(self)
         
         # Add pages to stacked widget
-        self.stacked_widget.addWidget(self.home_page)               # Index 0
-        self.stacked_widget.addWidget(self.angle_selection_page)    # Index 1
-        self.stacked_widget.addWidget(self.wheel_selection_page)     # Index 2
-        self.stacked_widget.addWidget(self.inspection_page)         # Index 3
-        self.stacked_widget.addWidget(self.calibration_page)        # Index 4
+        self.stacked_widget.addWidget(self.home_page)          # Index 0
+        self.stacked_widget.addWidget(self.selection_page)     # Index 1
+        self.stacked_widget.addWidget(self.inspection_page)   # Index 2
+        self.stacked_widget.addWidget(self.calibration_page)  # Index 3
         
         # Setup camera thread
         self.setup_camera_thread()
@@ -1648,11 +1390,11 @@ class App(QMainWindow):
         self.battery_indicator.setParent(self.central_widget)
         
         # Now show the window
-        self.setMinimumSize(480, 800)
-        QApplication.processEvents()
-        self.showNormal()
-        QApplication.processEvents()
-        self.showFullScreen()
+        self.setMinimumSize(480, 800)  # Set a reasonable minimum size
+        QApplication.processEvents()  # Allow initial layout calculations
+        self.showNormal()  # Show normal first
+        QApplication.processEvents()  # Process any pending events
+        self.showFullScreen()  # Then go fullscreen
         
         # Position battery indicator after window is shown
         self.battery_indicator.move(self.width() - 100, 10)
@@ -1663,6 +1405,7 @@ class App(QMainWindow):
         self.inspection_page.reset_btn.clicked.connect(self.reset_ui)
 
     def resizeEvent(self, event):
+        # Ensure the layout stays stable during resizing
         if self.battery_indicator:
             self.battery_indicator.move(self.width() - 100, 10)
         if self.stacked_widget:
@@ -1671,6 +1414,7 @@ class App(QMainWindow):
         super().resizeEvent(event)
 
     def showEvent(self, event):
+        # Ensure proper layout when showing
         if self.stacked_widget:
             self.stacked_widget.updateGeometry()
             self.stacked_widget.adjustSize()
@@ -1683,12 +1427,15 @@ class App(QMainWindow):
         self.camera_thread.test_complete_signal.connect(self.handle_test_complete)
         self.camera_thread.animation_signal.connect(self.trigger_animation)
         self.camera_thread.enable_buttons_signal.connect(self.set_buttons_enabled)
+        # Connect real-time classification signal
         self.camera_thread.realtime_classification_signal.connect(self.update_realtime_status)
         self.camera_thread.start()
 
     def update_realtime_status(self, status, recommendation):
+        """Update the real-time classification status in the UI"""
         self.inspection_page.realtime_status_indicator.setText(status)
         
+        # Update status color based on classification
         if status == "FLAW DETECTED":
             self.inspection_page.realtime_status_indicator.setStyleSheet("""
                 QLabel {
@@ -1722,6 +1469,7 @@ class App(QMainWindow):
 
     def update_image(self, qt_image):
         if self.captured_image:
+            # Display captured image if available
             self.inspection_page.camera_label.setPixmap(
                 QPixmap.fromImage(self.captured_image).scaled(
                 self.inspection_page.camera_label.size(), 
@@ -1729,6 +1477,7 @@ class App(QMainWindow):
                 Qt.SmoothTransformation
             ))
         else:
+            # Otherwise show live feed
             self.inspection_page.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
                 self.inspection_page.camera_label.size(), 
                 Qt.KeepAspectRatio, 
@@ -1814,6 +1563,7 @@ class App(QMainWindow):
         """)
         self.inspection_page.diameter_label.hide()
         
+        # Immediately disable the button for visual feedback
         self.inspection_page.detect_btn.setEnabled(False)
         self.inspection_page.measure_btn.setEnabled(False)
         self.inspection_page.save_btn.setEnabled(False)
@@ -1827,17 +1577,20 @@ class App(QMainWindow):
             bytes_per_line = ch * w
             self.captured_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
         
+        # Hide the real-time status indicator after capturing
         self.inspection_page.realtime_status_indicator.hide()
 
     def update_diameter(self, diameter):
+        """Update the UI with the measured diameter"""
         self.current_distance = diameter
         diameter_text = f"Wheel Diameter: {diameter:.1f} mm"
         self.inspection_page.diameter_label.setText(diameter_text)
         
+        # Set color and font based on diameter value
         if diameter <= 620:
-            color = "#FF0000"
+            color = "#FF0000"  # Red
         else:
-            color = "#00CC00"
+            color = "#00CC00"  # Green
             
         self.inspection_page.diameter_label.setStyleSheet(f"""
             QLabel {{
@@ -1847,6 +1600,7 @@ class App(QMainWindow):
             }}
         """)
         
+        # Enable save button if we have both test result and measurement
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
             self.inspection_page.save_btn.setEnabled(True)
             
@@ -1854,17 +1608,14 @@ class App(QMainWindow):
         self.inspection_page.diameter_label.setText("Measuring...")
         self.inspection_page.diameter_label.show()
 
+        # Disable all buttons during measurement
         self.inspection_page.detect_btn.setEnabled(False)
         self.inspection_page.measure_btn.setEnabled(False)
         self.inspection_page.save_btn.setEnabled(False)
 
         try:
-            self.serial_thread = SerialReaderThread(
-                port='/dev/ttyACM0',
-                baudrate=9600,
-                angle=self.angle  # Use the selected angle
-            )
-            self.serial_thread.diameter_measured.connect(self.update_diameter)
+            self.serial_thread = SerialReaderThread()
+            self.serial_thread.diameter_measured.connect(self.update_diameter)  # Connect to the new method
             self.serial_thread.measurement_complete.connect(self.on_diameter_measurement_complete)
             self.serial_thread.error_occurred.connect(self.handle_measurement_error)
             self.serial_thread.start()
@@ -1873,12 +1624,13 @@ class App(QMainWindow):
             print(f"Serial connection error: {e}")
             self.handle_measurement_error(f"Serial error: {str(e)}")
 
-    def handle_measurement_error(self, error_msg):
+    def handle_measurement_error(self, error_msg):  # New method to handle errors
         print(f"Measurement error: {error_msg}")
         self.inspection_page.diameter_label.setText("Measurement Error")
         self.on_diameter_measurement_complete()
 
-    def on_diameter_measurement_complete(self):
+    def on_diameter_measurement_complete(self):  # Renamed from on_measurement_complete
+        # After measurement, show Reset and Save buttons
         self.inspection_page.detect_btn.setVisible(False)
         self.inspection_page.measure_btn.setVisible(False)
         self.inspection_page.save_btn.setEnabled(True)
@@ -1886,16 +1638,20 @@ class App(QMainWindow):
         self.inspection_page.reset_btn.setVisible(True)
 
     def handle_test_complete(self, image, status, recommendation):
+        # Ensure we have a valid image
         if image is None or not isinstance(image, np.ndarray) or image.size == 0:
             print("Error: Invalid image received from test")
             self.test_image = None
         else:
-            self.test_image = image.copy()
+            self.test_image = image.copy()  # Make a copy to ensure we don't lose it
             
         self.test_status = status
         self.test_recommendation = recommendation
-        self.captured_image = None
+        self.captured_image = None  # Clear captured image flag
 
+        # After detection, show:
+        # - Detect Flaws (disabled)
+        # - Measure Diameter (enabled)
         self.inspection_page.detect_btn.setEnabled(False)
         self.inspection_page.detect_btn.setVisible(True)
         self.inspection_page.measure_btn.setEnabled(True)
@@ -1905,11 +1661,13 @@ class App(QMainWindow):
         self.inspection_page.reset_btn.setVisible(False)
 
     def set_buttons_enabled(self, enabled):
+        # Only enable measure button if we have a test result
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
             self.inspection_page.measure_btn.setEnabled(enabled)
         else:
             self.inspection_page.measure_btn.setEnabled(False)
         
+        # Only enable save button if we have both test result and measurement
         if (hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"] and self.current_distance != 680):
             self.inspection_page.save_btn.setEnabled(enabled)
         else:
@@ -1949,6 +1707,7 @@ class App(QMainWindow):
         """)
         msg.setWindowModality(Qt.ApplicationModal)
         
+        # Center the message box on screen
         msg.setWindowModality(Qt.WindowModal)
         msg.setGeometry(
             self.geometry().center().x() - 150,
@@ -1958,6 +1717,7 @@ class App(QMainWindow):
         )
         
         if msg.exec_() == QMessageBox.Save:
+            # Check if test_image exists and is valid
             if self.test_image is None or not isinstance(self.test_image, np.ndarray) or self.test_image.size == 0:
                 QMessageBox.critical(self, "Error", "No valid inspection image available to save.")
                 return
@@ -1965,6 +1725,7 @@ class App(QMainWindow):
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             
             try:
+                # Convert image to base64
                 success, buffer = cv2.imencode('.jpg', self.test_image)
                 if not success:
                     raise ValueError("Failed to encode image")
@@ -1973,6 +1734,7 @@ class App(QMainWindow):
                 
                 report_name = f"Train {self.trainNumber} - Compartment {self.compartmentNumber} - Wheel {self.wheelNumber}"
                 
+                # Send report and check if it was successful
                 success = send_report_to_backend(
                     status=self.test_status,
                     recommendation=self.test_recommendation,
@@ -1985,6 +1747,7 @@ class App(QMainWindow):
                 )
                 
                 if success:
+                    # Only reset if save was successful
                     self.reset_ui()
                     QMessageBox.information(self, "Success", "Report saved successfully!")
                 else:
@@ -1994,7 +1757,8 @@ class App(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Failed to save report: {str(e)}")
 
     def reset_ui(self):
-        self.stacked_widget.setCurrentIndex(1)  # Go back to angle selection page
+        self.stacked_widget.setCurrentIndex(1)  # Go back to selection page
+        self.inspection_page.update_selection_label()
         self.inspection_page.status_indicator.setText("READY")
         self.inspection_page.recommendation_indicator.setText("")
         self.inspection_page.diameter_label.setText("Wheel Diameter: -")
@@ -2022,6 +1786,7 @@ class App(QMainWindow):
             }
         """)
         
+        # Reset buttons to initial state
         self.inspection_page.detect_btn.setEnabled(True)
         self.inspection_page.detect_btn.setVisible(True)
         self.inspection_page.measure_btn.setEnabled(False)
@@ -2030,6 +1795,7 @@ class App(QMainWindow):
         self.inspection_page.save_btn.setVisible(False)
         self.inspection_page.reset_btn.setVisible(False)
 
+        # Reset data
         self.current_distance = 0
         self.test_image = None
         self.test_status = None
@@ -2038,6 +1804,7 @@ class App(QMainWindow):
 
         self.inspection_page.realtime_status_indicator.show()
         
+        # Reload the model for next use
         self.camera_thread.load_model()
 
     def closeEvent(self, event):
@@ -2057,6 +1824,7 @@ if __name__ == "__main__":
     # Load Montserrat font if available
     font_db = QFontDatabase()
     if "Montserrat Regular" not in font_db.families():
+        # Try to load the font from file if not found
         font_paths = {
             "Montserrat Regular": "Montserrat-Regular.ttf",
             "Montserrat Bold": "Montserrat-Bold.ttf",
