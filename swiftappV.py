@@ -30,7 +30,7 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
     backend_url = "https://ann-flaw-detection-system-for-train.onrender.com/api/reports"
 
     try:
-        # Create a temporary image file from base64
+        # Create a temporary image
         img_data = base64.b64decode(image_base64)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_img:
             temp_img.write(img_data)
@@ -91,10 +91,7 @@ class BatteryMonitorThread(QThread):
         
     def run(self):
         try:
-            # Jetson Nano uses I2C bus 1 (like Raspberry Pi models 2 and later)
             bus_number = 1
-            
-            # Initialize INA219 with correct parameters for Jetson Nano
             self.ina = INA219(
                 shunt_ohms=0.1,
                 max_expected_amps=0.6,
@@ -113,7 +110,6 @@ class BatteryMonitorThread(QThread):
             try:
                 voltage = self.ina.voltage()
                 # Calculate percentage for 2-cell Li-ion battery
-                # (6.0V = 0%, 8.4V = 100%)
                 percentage = min(100, max(0, (voltage - 6.0) / (8.4 - 6.0) * 100))
                 self.battery_updated.emit(voltage, percentage)
             except DeviceRangeError as e:
@@ -135,7 +131,6 @@ class BatteryIndicator(QWidget):
         self.percentage = 0
         self.setStyleSheet("background: transparent;")
         
-        # Set size based on whether it's compact mode
         if compact:
             self.setFixedSize(50, 25)
         else:
@@ -172,7 +167,6 @@ class BatteryIndicator(QWidget):
         # Calculate fill width based on percentage
         fill_width = max(0, min(body_width - 4, (body_width - 4) * self.percentage / 100))
         
-        # Choose color based on battery level
         if self.percentage > 60:
             color = QColor(0, 200, 0)  # Green
         elif self.percentage > 20:
@@ -180,12 +174,11 @@ class BatteryIndicator(QWidget):
         else:
             color = QColor(220, 0, 0)  # Red
         
-        # Draw battery fill
         painter.setPen(Qt.NoPen)
         painter.setBrush(color)
         painter.drawRoundedRect(body_x+2, body_y+2, fill_width, body_height-4, 1, 1)
         
-        # Draw percentage text only in non-compact mode
+        # Draw percentage text
         if not self.compact:
             painter.setPen(Qt.black)
             font = QFont("Arial", 8)
@@ -193,7 +186,7 @@ class BatteryIndicator(QWidget):
             painter.drawText(0, 0, w, h, Qt.AlignCenter, f"{int(self.percentage)}%")
 
 class CalibrationSerialThread(QThread):
-    distance_measured = pyqtSignal(float)  # Raw distance in mm
+    distance_measured = pyqtSignal(float)
     measurement_complete = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
@@ -207,18 +200,17 @@ class CalibrationSerialThread(QThread):
     def run(self):
         try:
             self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=1)
-            time.sleep(2)  # Wait for Arduino to initialize
+            time.sleep(2)
             
             valid_readings = []
             start_time = time.time()
             
-            # Collect readings for 2 seconds
             while time.time() - start_time < 2.0 and self._run_flag:
                 if self.serial_conn.in_waiting > 0:
                     line = self.serial_conn.readline().decode('utf-8').strip()
                     try:
                         distance = float(line)
-                        if distance > 0:  # Ignore error values
+                        if distance > 0:
                             valid_readings.append(distance)
                             self.distance_measured.emit(distance)
                     except ValueError:
@@ -246,16 +238,13 @@ class SerialReaderThread(QThread):
     measurement_complete = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
-    # Constants from Arduino code
     CHORD_L = 0.250  # metres (exact pad spacing)
     LEVER_GAIN = 3.00  # 3× mechanical amplifier
     LIFT_OFF_MM = 38.0  # sensor→lever gap when off-wheel
     
-    # Calibration constants (update these with your actual calibration values)
     CAL_700_RAW = 200.0  # gap on 700 mm ring (bigger gap)
     CAL_625_RAW = 100.0  # gap on 625 mm ring (smaller gap)
     
-    # Calculated constants
     M_SLOPE = (700.0 - 625.0) / (CAL_700_RAW - CAL_625_RAW)
     B_OFFS = 700.0 - M_SLOPE * CAL_700_RAW
 
@@ -266,7 +255,6 @@ class SerialReaderThread(QThread):
         self.baudrate   = baudrate
         self.serial_conn = None
 
-        # ←── NEW: how long to collect raw readings
         self.collection_time = 5.0  
 
         self.load_calibration_values()
@@ -286,7 +274,6 @@ class SerialReaderThread(QThread):
                         elif "B_OFFS:" in line:
                             self.B_OFFS = float(line.split(":")[1].strip())
                             
-                # Recalculate in case file was incomplete
                 self.M_SLOPE = (700.0 - 625.0) / (self.CAL_700_RAW - self.CAL_625_RAW)
                 self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
                 
@@ -343,7 +330,6 @@ class SerialReaderThread(QThread):
             valid_diameters = []
             start_time = time.time()
 
-            # ←── COLLECT for self.collection_time seconds
             while time.time() - start_time < self.collection_time and self._run_flag:
                 if self.serial_conn.in_waiting > 0:
                     line = self.serial_conn.readline().decode('utf-8').strip()
@@ -397,7 +383,6 @@ class CameraThread(QThread):
     test_complete_signal = pyqtSignal(np.ndarray, str, str)
     animation_signal = pyqtSignal()
     enable_buttons_signal = pyqtSignal(bool)
-    # New signal for real-time classification
     realtime_classification_signal = pyqtSignal(str, str)
 
     def __init__(self):
