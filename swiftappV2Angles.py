@@ -1106,7 +1106,7 @@ class CalibrationPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
-        self.setup_ui()
+        # INITIALIZE FIRST
         self.calibration_values = {
             "Top": {"700mm": None, "632mm": None},
             "Side": {"700mm": None, "632mm": None}
@@ -1116,7 +1116,10 @@ class CalibrationPage(QWidget):
             "Side": {"700mm": None, "632mm": None}
         }
         self.current_reading = None
+        
+        self.setup_ui()  # Now setup_ui can access the attributes
         self.load_calibration_values()
+
 
     def setup_ui(self):
         self.layout = QVBoxLayout()
