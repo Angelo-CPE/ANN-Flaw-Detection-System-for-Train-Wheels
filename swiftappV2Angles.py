@@ -212,22 +212,43 @@ class CalibrationSerialThread(QThread):
             valid_readings = []
             start_time = time.time()
             
-            # Collect readings for 2 seconds
+            # Collect readings for 10 seconds with higher frequency
             while time.time() - start_time < 10.0 and self._run_flag:
                 if self.serial_conn.in_waiting > 0:
                     line = self.serial_conn.readline().decode('utf-8').strip()
                     try:
                         distance = float(line)
-                        if distance > 0:  # Ignore error values
+                        if 0 < distance < 500:  # More realistic range check
                             valid_readings.append(distance)
                             self.distance_measured.emit(distance)
                     except ValueError:
                         pass
-                time.sleep(0.01)
+                time.sleep(0.002)  # Higher sampling rate (500Hz)
                 
-            # Calculate median of valid readings
+            # Improved filtering: median + moving average
             if valid_readings:
-                median_distance = float(np.median(valid_readings))
+                # First pass: remove outliers
+                sorted_readings = sorted(valid_readings)
+                n = len(sorted_readings)
+                if n > 10:
+                    # Remove top and bottom 10% to eliminate outliers
+                    trimmed = sorted_readings[int(n*0.1):int(n*0.9)]
+                    # Calculate median of trimmed data
+                    median_distance = float(np.median(trimmed))
+                    
+                    # Second pass: moving average around median
+                    window = []
+                    for val in valid_readings:
+                        if abs(val - median_distance) < 10:  # Only include values near median
+                            window.append(val)
+                            if len(window) > 20:  # Moving window of 20 samples
+                                window.pop(0)
+                    
+                    if window:
+                        median_distance = float(np.mean(window))
+                else:
+                    median_distance = float(np.median(valid_readings))
+                    
                 self.distance_measured.emit(median_distance)
                 
         except Exception as e:
@@ -251,11 +272,11 @@ class SerialReaderThread(QThread):
     LEVER_GAIN = 3.00  # 3× mechanical amplifier
     LIFT_OFF_MM = 28.0  # sensor→lever gap when off-wheel
     
-    # Calibration constants (update these with your actual calibration values)
-    CAL_700_TOP = 200.0  # gap on 700 mm ring (bigger gap) - Top Angle
-    CAL_700_SIDE = 200.0  # gap on 700 mm ring (bigger gap) - Side Angle
-    CAL_632_TOP = 100.0  # gap on 632 mm ring (smaller gap) - Top Angle
-    CAL_632_SIDE = 100.0  # gap on 632 mm ring (smaller gap) - Side Angle
+    # Calibration constants
+    CAL_700_TOP = 200.0
+    CAL_700_SIDE = 200.0
+    CAL_632_TOP = 100.0
+    CAL_632_SIDE = 100.0
     
     # Calculated constants for each angle
     M_SLOPE_TOP = (700.0 - 632.0) / (CAL_700_TOP - CAL_632_TOP)
@@ -269,15 +290,11 @@ class SerialReaderThread(QThread):
         self._run_flag = True
         self.port       = port
         self.baudrate   = baudrate
-        self.angle = angle  # "Top" or "Side"
+        self.angle = angle
         self.serial_conn = None
-
-        # How long to collect raw readings
-        self.collection_time = 15.0  
-
+        self.collection_time = 20.0  # Increased measurement time
         self.slopes = {}
         self.offsets = {}
-
         self.load_calibration_values()
     
     def load_calibration_values(self):
@@ -298,44 +315,76 @@ class SerialReaderThread(QThread):
             self.slopes[ang] = m
             self.offsets[ang] = b
 
-    def calculate_diameter(self, raw_mm):
+    def raw_to_diameter(self, raw_mm):
         # Apply angle-specific linear map
         m = self.slopes.get(self.angle, list(self.slopes.values())[0])
         b = self.offsets.get(self.angle, list(self.offsets.values())[0])
-        raw_dia = m * raw_mm + b
-        # EMA smoothing
-        if not hasattr(self, '_filtered'):
-            self._filtered = raw_dia
-        alpha = 0.3
-        self._filtered = alpha * raw_dia + (1 - alpha) * self._filtered
-        return round(self._filtered, 1)
+        return m * raw_mm + b
 
     def run(self):
-        import numpy as _np
         try:
             ser = serial.Serial(self.port, self.baudrate, timeout=1)
             time.sleep(2)
-            readings = []
-            start = time.time()
-            while time.time() - start < self.collection_time:
-                if ser.in_waiting > 0:
-                    line = ser.readline().decode().strip()
-                    try:
-                        v = float(line)
-                        if v > 0:
-                            d = self.calculate_diameter(v)
-                            readings.append(d)
-                            self.diameter_measured.emit(d)
-                    except:
-                        pass
-                time.sleep(0.005)
-            if readings:
-                self.diameter_measured.emit(float(_np.median(readings)))
+            
+            # Take 3 consecutive measurements for better accuracy
+            final_diameters = []
+            
+            for measurement_pass in range(3):
+                raw_readings = []
+                start = time.time()
+                while time.time() - start < self.collection_time / 3:
+                    if ser.in_waiting > 0:
+                        line = ser.readline().decode().strip()
+                        try:
+                            v = float(line)
+                            if 0 < v < 500:  # Realistic range check
+                                raw_readings.append(v)
+                                # Emit real-time converted value for UI
+                                d = self.raw_to_diameter(v)
+                                self.diameter_measured.emit(d)
+                        except:
+                            pass
+                    time.sleep(0.002)  # Higher sampling rate (500Hz)
+                
+                if raw_readings:
+                    # Improved filtering: remove outliers
+                    sorted_raw = sorted(raw_readings)
+                    n = len(sorted_raw)
+                    if n > 10:
+                        # Trim top and bottom 10%
+                        trimmed = sorted_raw[int(n*0.1):int(n*0.9)]
+                        median_raw = float(np.median(trimmed))
+                        
+                        # Moving average around median
+                        window = []
+                        for val in raw_readings:
+                            if abs(val - median_raw) < 10:  # Only include values near median
+                                window.append(val)
+                                if len(window) > 20:
+                                    window.pop(0)
+                        
+                        if window:
+                            median_raw = float(np.mean(window))
+                    else:
+                        median_raw = float(np.median(raw_readings))
+                    
+                    # Convert to diameter
+                    diameter = self.raw_to_diameter(median_raw)
+                    final_diameters.append(diameter)
+            
+            if final_diameters:
+                # Take median of the three measurements
+                final_diameter = float(np.median(final_diameters))
+                self.diameter_measured.emit(final_diameter)
+                
         except Exception as e:
             self.error_occurred.emit(str(e))
         finally:
-            try: ser.close()
-            except: pass
+            try: 
+                if ser and ser.is_open:
+                    ser.close()
+            except: 
+                pass
             self.measurement_complete.emit()
 
     def stop(self):
