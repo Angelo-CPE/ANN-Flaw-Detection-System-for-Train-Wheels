@@ -400,11 +400,9 @@ class CameraThread(QThread):
             if os.path.exists(model_path):
                 self.model.load_state_dict(torch.load(model_path, map_location=self.device))
                 self.model.eval()
-                for param in self.model.parameters():
-                    param.requires_grad = False
-                print("ANN model loaded successfully")
-            else:
-                raise FileNotFoundError(f"Model file not found at {model_path}")
+            for param in self.model.parameters():
+                param.requires_grad = False
+            print("ANN model loaded successfully")
         except Exception as e:
             print(f"Error loading model: {e}")
             self.model = None
@@ -890,7 +888,6 @@ class InspectionPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
-        self.captured_image = None  # Add this to store captured image
         self.is_captured_mode = False  # Flag for captured image display
         self.setup_ui()
         self.setup_animations()
