@@ -15,7 +15,7 @@ from scipy.signal import hilbert
 import torch.nn as nn
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
                             QPushButton, QLabel, QWidget, QFrame, QMessageBox, QSizePolicy,
-                            QGridLayout, QStackedWidget, QSlider, QStyle)
+                            QGridLayout, QStackedWidget, QSlider, QStyle, QComboBox)
 from PyQt5.QtGui import QImage, QPixmap, QFont, QColor, QPainter, QPen, QFontDatabase, QIcon
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve
 import serial
@@ -250,7 +250,7 @@ class SerialReaderThread(QThread):
     # Constants from Arduino code
     CHORD_L = 0.250  # metres (exact pad spacing)
     LEVER_GAIN = 3.00  # 3× mechanical amplifier
-    LIFT_OFF_MM = 39.0  # sensor→lever gap when off-wheel
+    LIFT_OFF_MM = 28.0  # sensor→lever gap when off-wheel
     
     # Calibration constants (update these with your actual calibration values)
     CAL_700_RAW = 200.0  # gap on 700 mm ring (bigger gap)
@@ -711,6 +711,38 @@ class SelectionPage(QWidget):
         """)
         content_layout.addWidget(section_title)
         
+        # Angle Selection - new addition
+        self.angle_layout = QVBoxLayout()
+        self.angle_layout.setSpacing(2)
+        self.angle_label = QLabel("Inspection Angle")
+        self.angle_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat SemiBold';
+                font-size: 16px;
+                color: #555;
+                margin-bottom: 2px;
+            }
+        """)
+        self.angle_layout.addWidget(self.angle_label)
+        
+        self.angle_combo = QComboBox()
+        self.angle_combo.addItem("Top View")
+        self.angle_combo.addItem("Side View")
+        self.angle_combo.setStyleSheet("""
+            QComboBox {
+                font-family: 'Montserrat Regular';
+                font-size: 16px;
+                padding: 5px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+            }
+            QComboBox:hover {
+                border: 1px solid #e60000;
+            }
+        """)
+        self.angle_layout.addWidget(self.angle_combo)
+        content_layout.addLayout(self.angle_layout)
+        
         # Train Selection - reduced spacing
         self.train_layout = QVBoxLayout()
         self.train_layout.setSpacing(2)  # Reduced from 0 to 2 for slight separation
@@ -849,6 +881,7 @@ class SelectionPage(QWidget):
         self.parent.trainNumber = self.train_slider.value()
         self.parent.compartmentNumber = self.compartment_slider.value()
         self.parent.wheelNumber = self.wheel_slider.value()
+        self.parent.inspectionAngle = self.angle_combo.currentText()
         # Update the inspection page's selection label
         self.parent.inspection_page.update_selection_label()
         self.parent.stacked_widget.setCurrentIndex(2)
@@ -1058,10 +1091,12 @@ class InspectionPage(QWidget):
         self.reset_btn.clicked.connect(self.parent.reset_ui)
 
     def update_selection_label(self):
+        angle_text = "Top" if self.parent.inspectionAngle == "Top View" else "Side"
         self.selection_label.setText(
             f"Train: {self.parent.trainNumber} | "
             f"Compartment: {self.parent.compartmentNumber} | "
-            f"Wheel: {self.parent.wheelNumber}"
+            f"Wheel: {self.parent.wheelNumber} | "
+            f"Angle: {angle_text}"
         )
 
     def setup_animations(self):
@@ -1075,8 +1110,14 @@ class CalibrationPage(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.setup_ui()
-        self.calibration_values = {"700mm": None, "632mm": None}
-        self.calibration_timestamps = {"700mm": None, "632mm": None}  # New dictionary for timestamps
+        self.calibration_values = {
+            "Top": {"700mm": None, "632mm": None},
+            "Side": {"700mm": None, "632mm": None}
+        }
+        self.calibration_timestamps = {
+            "Top": {"700mm": None, "632mm": None},
+            "Side": {"700mm": None, "632mm": None}
+        }
         self.current_reading = None
         self.load_calibration_values()
 
@@ -1131,11 +1172,44 @@ class CalibrationPage(QWidget):
         """)
         self.layout.addWidget(self.title_label)
         
-        # 700mm Calibration Section
+        # Angle Selection
+        self.angle_layout = QHBoxLayout()
+        self.angle_layout.setSpacing(10)
+        self.angle_label = QLabel("Calibration Angle:")
+        self.angle_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Montserrat SemiBold';
+                font-size: 18px;
+                color: #333;
+            }
+        """)
+        self.angle_layout.addWidget(self.angle_label)
+        
+        self.angle_combo = QComboBox()
+        self.angle_combo.addItem("Top View")
+        self.angle_combo.addItem("Side View")
+        self.angle_combo.setStyleSheet("""
+            QComboBox {
+                font-family: 'Montserrat Regular';
+                font-size: 16px;
+                padding: 5px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                min-width: 150px;
+            }
+            QComboBox:hover {
+                border: 1px solid #e60000;
+            }
+        """)
+        self.angle_combo.currentIndexChanged.connect(self.update_calibration_display)
+        self.angle_layout.addWidget(self.angle_combo)
+        self.angle_layout.addStretch()
+        self.layout.addLayout(self.angle_layout)
+        
+        # Calibration Groups
         self.calib_700_group = self.create_calibration_group("700 mm Train Wheel", "1st Calibration")
         self.layout.addWidget(self.calib_700_group)
         
-        # 632mm Calibration Section
         self.calib_632_group = self.create_calibration_group("632 mm Train Wheel", "2nd Calibration")
         self.layout.addWidget(self.calib_632_group)
         
@@ -1154,6 +1228,9 @@ class CalibrationPage(QWidget):
         
         self.layout.addStretch(1)
         self.setLayout(self.layout)
+        
+        # Initialize with Top view
+        self.update_calibration_display()
 
     def create_calibration_group(self, title, button_text):
         group = QFrame()
@@ -1225,18 +1302,33 @@ class CalibrationPage(QWidget):
         if "700" in title:
             self.calib_700_reading = reading_label
             self.calib_700_button = calib_button
-            self.calib_700_timestamp = timestamp_label  # New reference
+            self.calib_700_timestamp = timestamp_label
             calib_button.clicked.connect(lambda: self.start_measurement("700mm"))
         else:
             self.calib_632_reading = reading_label
             self.calib_632_button = calib_button
-            self.calib_632_timestamp = timestamp_label  # New reference
+            self.calib_632_timestamp = timestamp_label
             calib_button.clicked.connect(lambda: self.start_measurement("632mm"))
             
         layout.addWidget(calib_button)
         
         group.setLayout(layout)
         return group
+
+    def update_calibration_display(self):
+        angle = "Top" if self.angle_combo.currentText() == "Top View" else "Side"
+        
+        # Update 700mm values
+        value = self.calibration_values[angle]["700mm"]
+        timestamp = self.calibration_timestamps[angle]["700mm"]
+        self.calib_700_reading.setText(f"Distance: {value} mm" if value is not None else "Distance: -")
+        self.calib_700_timestamp.setText(f"Last calibrated: {timestamp}" if timestamp else "Last calibrated: Never")
+        
+        # Update 632mm values
+        value = self.calibration_values[angle]["632mm"]
+        timestamp = self.calibration_timestamps[angle]["632mm"]
+        self.calib_632_reading.setText(f"Distance: {value} mm" if value is not None else "Distance: -")
+        self.calib_632_timestamp.setText(f"Last calibrated: {timestamp}" if timestamp else "Last calibrated: Never")
 
     def start_measurement(self, wheel_type):
         # Disable both buttons during measurement
@@ -1269,25 +1361,16 @@ class CalibrationPage(QWidget):
 
     def on_measurement_complete(self, wheel_type):
         if self.current_reading is not None:
-            self.calibration_values[wheel_type] = self.current_reading
-            # Update timestamp with current date and time in military format
-            current_time = time.strftime("%Y-%m-%d %H:%M")  # Changed to 24-hour format without seconds
-            self.calibration_timestamps[wheel_type] = current_time
+            angle = "Top" if self.angle_combo.currentText() == "Top View" else "Side"
+            self.calibration_values[angle][wheel_type] = self.current_reading
+            # Update timestamp with current date and time
+            current_time = time.strftime("%Y-%m-%d %H:%M")
+            self.calibration_timestamps[angle][wheel_type] = current_time
             
-            # Update the timestamp label
-            if wheel_type == "700mm":
-                self.calib_700_timestamp.setText(f"Last calibrated: {current_time}")
-            else:
-                self.calib_632_timestamp.setText(f"Last calibrated: {current_time}")
-                
-            self.status_label.setText(f"{wheel_type} calibrated at {self.current_reading} mm")
+            # Update the UI
+            self.update_calibration_display()
+            self.status_label.setText(f"{angle} {wheel_type} calibrated at {self.current_reading} mm")
             
-            # Update the calibration constants in SerialReaderThread
-            if wheel_type == "700mm":
-                SerialReaderThread.CAL_700_RAW = self.current_reading
-            else:
-                SerialReaderThread.CAL_632_RAW = self.current_reading
-                
             self.save_calibration_values()
         
         # Re-enable buttons
@@ -1302,34 +1385,52 @@ class CalibrationPage(QWidget):
 
     def save_calibration_values(self):
         # Save to file with the new format that includes recalculated constants and timestamps
-        print("Calibration values:", self.calibration_values)
         with open("calibration_values.txt", "w") as f:
-            f.write(f"700mm: {self.calibration_values['700mm']}\n")
-            f.write(f"632mm: {self.calibration_values['632mm']}\n")
-            # Save timestamps if they exist
-            if self.calibration_timestamps['700mm']:
-                f.write(f"700mm_timestamp: {self.calibration_timestamps['700mm']}\n")
-            if self.calibration_timestamps['632mm']:
-                f.write(f"632mm_timestamp: {self.calibration_timestamps['632mm']}\n")
+            # Save Top calibration
+            f.write("[Top Calibration]\n")
+            f.write(f"700mm: {self.calibration_values['Top']['700mm']}\n")
+            f.write(f"632mm: {self.calibration_values['Top']['632mm']}\n")
+            f.write(f"700mm_timestamp: {self.calibration_timestamps['Top']['700mm']}\n")
+            f.write(f"632mm_timestamp: {self.calibration_timestamps['Top']['632mm']}\n")
+            
+            # Save Side calibration
+            f.write("\n[Side Calibration]\n")
+            f.write(f"700mm: {self.calibration_values['Side']['700mm']}\n")
+            f.write(f"632mm: {self.calibration_values['Side']['632mm']}\n")
+            f.write(f"700mm_timestamp: {self.calibration_timestamps['Side']['700mm']}\n")
+            f.write(f"632mm_timestamp: {self.calibration_timestamps['Side']['632mm']}\n")
 
     def load_calibration_values(self):
         try:
             if os.path.exists("calibration_values.txt"):
+                current_section = None
                 with open("calibration_values.txt", "r") as f:
-                    lines = f.readlines()
-                    for line in lines:
-                        if "700mm:" in line and not "timestamp" in line:
-                            self.calibration_values['700mm'] = float(line.split(":")[1].strip())
-                            self.calib_700_reading.setText(f"Distance: {self.calibration_values['700mm']} mm")
-                        elif "632mm:" in line and not "timestamp" in line:
-                            self.calibration_values['632mm'] = float(line.split(":")[1].strip())
-                            self.calib_632_reading.setText(f"Distance: {self.calibration_values['632mm']} mm")
-                        elif "700mm_timestamp:" in line:
-                            self.calibration_timestamps['700mm'] = line.split(":")[1].strip()
-                            self.calib_700_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['700mm']}")
-                        elif "632mm_timestamp:" in line:
-                            self.calibration_timestamps['632mm'] = line.split(":")[1].strip()
-                            self.calib_632_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['632mm']}")
+                    for line in f.readlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                            
+                        if line == "[Top Calibration]":
+                            current_section = "Top"
+                        elif line == "[Side Calibration]":
+                            current_section = "Side"
+                        elif current_section:
+                            if "700mm:" in line:
+                                value = line.split(":")[1].strip()
+                                if value != "None":
+                                    self.calibration_values[current_section]["700mm"] = float(value)
+                            elif "632mm:" in line:
+                                value = line.split(":")[1].strip()
+                                if value != "None":
+                                    self.calibration_values[current_section]["632mm"] = float(value)
+                            elif "700mm_timestamp:" in line:
+                                value = line.split(":")[1].strip()
+                                if value != "None":
+                                    self.calibration_timestamps[current_section]["700mm"] = value
+                            elif "632mm_timestamp:" in line:
+                                value = line.split(":")[1].strip()
+                                if value != "None":
+                                    self.calibration_timestamps[current_section]["632mm"] = value
         except Exception as e:
             print(f"Error loading calibration values: {e}")
 
@@ -1343,6 +1444,7 @@ class App(QMainWindow):
         self.trainNumber = 1
         self.compartmentNumber = 1
         self.wheelNumber = 1
+        self.inspectionAngle = "Top View"  # Default to Top View
         self.current_distance = 0
         self.test_image = None
         self.test_status = None
