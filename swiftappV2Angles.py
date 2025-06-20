@@ -1464,14 +1464,16 @@ class CalibrationPage(QWidget):
 
     def update_reading(self, calib_type, distance):
         self.current_reading = distance
+        # Format to 2 decimal places for display
+        formatted_distance = f"{distance:.2f}"
         if calib_type == "700_Top":
-            self.calib_700_top_reading.setText(f"Distance: {distance} mm")
+            self.calib_700_top_reading.setText(f"Distance: {formatted_distance} mm")
         elif calib_type == "700_Side":
-            self.calib_700_side_reading.setText(f"Distance: {distance} mm")
+            self.calib_700_side_reading.setText(f"Distance: {formatted_distance} mm")
         elif calib_type == "632_Top":
-            self.calib_632_top_reading.setText(f"Distance: {distance} mm")
+            self.calib_632_top_reading.setText(f"Distance: {formatted_distance} mm")
         else:  # "632_Side"
-            self.calib_632_side_reading.setText(f"Distance: {distance} mm")
+            self.calib_632_side_reading.setText(f"Distance: {formatted_distance} mm")
 
     def on_measurement_complete(self, calib_type):
         if self.current_reading is not None:
@@ -1552,29 +1554,22 @@ class CalibrationPage(QWidget):
                     lines = f.readlines()
                     for line in lines:
                         if "700_Top:" in line and not "timestamp" in line:
-                            self.calibration_values['700_Top'] = float(line.split(":")[1].strip())
-                            self.calib_700_top_reading.setText(f"Distance: {self.calibration_values['700_Top']} mm")
+                            value = float(line.split(":")[1].strip())
+                            self.calibration_values['700_Top'] = value
+                            # Format to 2 decimal places for display
+                            self.calib_700_top_reading.setText(f"Distance: {value:.2f} mm")
                         elif "700_Side:" in line and not "timestamp" in line:
-                            self.calibration_values['700_Side'] = float(line.split(":")[1].strip())
-                            self.calib_700_side_reading.setText(f"Distance: {self.calibration_values['700_Side']} mm")
+                            value = float(line.split(":")[1].strip())
+                            self.calibration_values['700_Side'] = value
+                            self.calib_700_side_reading.setText(f"Distance: {value:.2f} mm")
                         elif "632_Top:" in line and not "timestamp" in line:
-                            self.calibration_values['632_Top'] = float(line.split(":")[1].strip())
-                            self.calib_632_top_reading.setText(f"Distance: {self.calibration_values['632_Top']} mm")
+                            value = float(line.split(":")[1].strip())
+                            self.calibration_values['632_Top'] = value
+                            self.calib_632_top_reading.setText(f"Distance: {value:.2f} mm")
                         elif "632_Side:" in line and not "timestamp" in line:
-                            self.calibration_values['632_Side'] = float(line.split(":")[1].strip())
-                            self.calib_632_side_reading.setText(f"Distance: {self.calibration_values['632_Side']} mm")
-                        elif "700_Top_timestamp:" in line:
-                            self.calibration_timestamps['700_Top'] = line.split(":")[1].strip()
-                            self.calib_700_top_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['700_Top']}")
-                        elif "700_Side_timestamp:" in line:
-                            self.calibration_timestamps['700_Side'] = line.split(":")[1].strip()
-                            self.calib_700_side_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['700_Side']}")
-                        elif "632_Top_timestamp:" in line:
-                            self.calibration_timestamps['632_Top'] = line.split(":")[1].strip()
-                            self.calib_632_top_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['632_Top']}")
-                        elif "632_Side_timestamp:" in line:
-                            self.calibration_timestamps['632_Side'] = line.split(":")[1].strip()
-                            self.calib_632_side_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['632_Side']}")
+                            value = float(line.split(":")[1].strip())
+                            self.calibration_values['632_Side'] = value
+                            self.calib_632_side_reading.setText(f"Distance: {value:.2f} mm")
                         elif "M_SLOPE_TOP:" in line:
                             SerialReaderThread.M_SLOPE_TOP = float(line.split(":")[1].strip())
                         elif "B_OFFS_TOP:" in line:
