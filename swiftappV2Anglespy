@@ -14,7 +14,7 @@ from scipy.signal import hilbert
 import torch.nn as nn
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
                             QPushButton, QLabel, QWidget, QFrame, QMessageBox, QSizePolicy,
-                            QGridLayout, QStackedWidget, QSlider, QStyle)
+                            QGridLayout, QStackedWidget, QSlider, QStyle, QComboBox)
 from PyQt5.QtGui import QImage, QPixmap, QFont, QColor, QPainter, QPen, QFontDatabase, QIcon
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve
 import serial
@@ -259,95 +259,78 @@ class SerialReaderThread(QThread):
     M_SLOPE = (700.0 - 632.0) / (CAL_700_RAW - CAL_632_RAW)
     B_OFFS = 700.0 - M_SLOPE * CAL_700_RAW
 
-    def __init__(self, port='/dev/ttyACM0', baudrate=9600):
+    def __init__(self, port='/dev/ttyACM0', baudrate=9600, orientation="Top"):
         super().__init__()
         self._run_flag = True
         self.port       = port
         self.baudrate   = baudrate
+        self.orientation = orientation
         self.serial_conn = None
 
         # ←── NEW: how long to collect raw readings
         self.collection_time = 15.0  
 
+        self.slopes = {}
+        self.offsets = {}
+
         self.load_calibration_values()
     
     def load_calibration_values(self):
-        try:
-            if os.path.exists("calibration_values.txt"):
-                with open("calibration_values.txt", "r") as f:
-                    lines = f.readlines()
-                    for line in lines:
-                        if "700mm:" in line:
-                            self.CAL_700_RAW = float(line.split(":")[1].strip())
-                        elif "632mm:" in line:
-                            self.CAL_632_RAW = float(line.split(":")[1].strip())
-                        elif "M_SLOPE:" in line:
-                            self.M_SLOPE = float(line.split(":")[1].strip())
-                        elif "B_OFFS:" in line:
-                            self.B_OFFS = float(line.split(":")[1].strip())
-                            
-                # Recalculate in case file was incomplete
-                self.M_SLOPE = (700.0 - 632.0) / (self.CAL_700_RAW - self.CAL_632_RAW)
-                self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
-                
-                print("Loaded calibration values:")
-                print(f"CAL_700_RAW: {self.CAL_700_RAW}")
-                print(f"CAL_632_RAW: {self.CAL_632_RAW}")
-                print(f"M_SLOPE: {self.M_SLOPE}")
-                print(f"B_OFFS: {self.B_OFFS}")
-        except Exception as e:
-            print(f"Error loading calibration values: {e}")
-            # Fall back to defaults
-            self.CAL_700_RAW = 200.0
-            self.CAL_632_RAW = 100.0
-            self.M_SLOPE = (700.0 - 632.0) / (self.CAL_700_RAW - self.CAL_632_RAW)
-            self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
+        # Load per‐orientation raw values from file
+        vals = {}
+        if os.path.exists("calibration_values.txt"):
+            with open("calibration_values.txt","r") as f:
+                for line in f:
+                    if ":" in line and "timestamp" not in line:
+                        k, v = line.split(":")
+                        vals[k.strip()] = float(v.strip())
+        # Compute slope/offset per orientation
+        for ori in ["Top","Side","Front","Back"]:
+            r1 = vals.get(f"{ori}_700", 200.0)
+            r2 = vals.get(f"{ori}_632", 100.0)
+            m = (700.0 - 632.0) / (r1 - r2)
+            b = 700.0 - m * r1
+            self.slopes[ori] = m
+            self.offsets[ori] = b
 
     def calculate_diameter(self, raw_mm):
-        dia1, raw1 = 700.0, self.CAL_700_RAW
-        dia2, raw2 = 632.0, self.CAL_632_RAW
-        slope = (dia1 - dia2) / (raw1 - raw2)
-        offset = dia1 - slope * raw1
-        raw_dia = slope * raw_mm + offset
-        if not hasattr(self, '_filtered_dia'):
-            self._filtered_dia = raw_dia
+        # Apply orientation-specific linear map
+        m = self.slopes.get(self.orientation, list(self.slopes.values())[0])
+        b = self.offsets.get(self.orientation, list(self.offsets.values())[0])
+        raw_dia = m * raw_mm + b
+        # EMA smoothing
+        if not hasattr(self, '_filtered'):
+            self._filtered = raw_dia
         alpha = 0.3
-        self._filtered_dia = alpha * raw_dia + (1 - alpha) * self._filtered_dia
-        return round(self._filtered_dia)
+        self._filtered = alpha * raw_dia + (1 - alpha) * self._filtered
+        return round(self._filtered, 1)
 
     def run(self):
+        import numpy as _np
         try:
-            self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=1)
-            time.sleep(2)  # allow Arduino to wake up
-
-            valid_diameters = []
-            start_time = time.time()
-
-            # ←── COLLECT for self.collection_time seconds
-            while time.time() - start_time < self.collection_time and self._run_flag:
-                if self.serial_conn.in_waiting > 0:
-                    line = self.serial_conn.readline().decode('utf-8').strip()
+            ser = serial.Serial(self.port, self.baudrate, timeout=1)
+            time.sleep(2)
+            readings = []
+            start = time.time()
+            while time.time() - start < self.collection_time:
+                if ser.in_waiting > 0:
+                    line = ser.readline().decode().strip()
                     try:
-                        raw_mm = float(line)                     # treat incoming as raw mm
-                        if raw_mm > 0:
-                            dia = self.calculate_diameter(raw_mm) # apply your formula
-                            valid_diameters.append(dia)
-                            self.diameter_measured.emit(dia)
-                    except ValueError:
+                        v = float(line)
+                        if v > 0:
+                            d = self.calculate_diameter(v)
+                            readings.append(d)
+                            self.diameter_measured.emit(d)
+                    except:
                         pass
-                time.sleep(0.005)  # tighter polling, so we catch every 200 ms frame
-
-            # Emit the median of all collected diameters
-            if valid_diameters:
-                median_d = float(np.median(valid_diameters))
-                self.diameter_measured.emit(median_d)
-
+                time.sleep(0.005)
+            if readings:
+                self.diameter_measured.emit(float(_np.median(readings)))
         except Exception as e:
             self.error_occurred.emit(str(e))
-
         finally:
-            if self.serial_conn and self.serial_conn.is_open:
-                self.serial_conn.close()
+            try: ser.close()
+            except: pass
             self.measurement_complete.emit()
 
     def stop(self):
@@ -925,6 +908,19 @@ class InspectionPage(QWidget):
         self.update_selection_label()
         self.control_layout.addWidget(self.selection_label)
         
+        # Add Orientation selector
+        ori_layout = QHBoxLayout()
+        ori_label = QLabel("Orientation:")
+        ori_label.setStyleSheet("font-size: 14px;")
+        self.orientation_combo = QComboBox()
+        self.orientation_combo.addItems(["Top", "Side", "Front", "Back"])
+        self.orientation_combo.currentTextChanged.connect(
+            lambda txt: setattr(self.parent, 'orientation', txt)
+        )
+        ori_layout.addWidget(ori_label)
+        ori_layout.addWidget(self.orientation_combo)
+        self.layout.addLayout(ori_layout)
+
         # Status Panel
         self.status_panel = QFrame()
         self.status_panel.setStyleSheet("QFrame { background: white; border: none; }")
@@ -1349,6 +1345,7 @@ class CalibrationPage(QWidget):
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.orientation = "Top"
         self.setWindowTitle("Wheel Inspection")
         self.setWindowIcon(QIcon("logo.png"))
         
@@ -1627,7 +1624,11 @@ class App(QMainWindow):
         self.inspection_page.save_btn.setEnabled(False)
 
         try:
-            self.serial_thread = SerialReaderThread()
+            self.serial_thread = SerialReaderThread(
+                port='/dev/ttyACM0',
+                baudrate=9600,
+                orientation=self.orientation
+            )
             self.serial_thread.diameter_measured.connect(self.update_diameter)  # Connect to the new method
             self.serial_thread.measurement_complete.connect(self.on_diameter_measurement_complete)
             self.serial_thread.error_occurred.connect(self.handle_measurement_error)
