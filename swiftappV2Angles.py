@@ -270,7 +270,7 @@ class SerialReaderThread(QThread):
     # Constants from Arduino code
     CHORD_L = 0.250  # metres (exact pad spacing)
     LEVER_GAIN = 3.00  # 3× mechanical amplifier
-    LIFT_OFF_MM = 28.0  # sensor→lever gap when off-wheel
+    LIFT_OFF_MM = 41.0  # sensor→lever gap when off-wheel
     
     # Calibration constants
     CAL_700_TOP = 200.0
