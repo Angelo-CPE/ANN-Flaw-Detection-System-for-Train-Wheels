@@ -280,23 +280,25 @@ class SerialReaderThread(QThread):
                 with open("calibration_values.txt", "r") as f:
                     lines = f.readlines()
                     for line in lines:
-                        if "700mm:" in line:
-                            value = line.split(":")[1].strip()
-                            if value != "None":  # Handle None case
+                        parts = line.strip().split(':')
+                        if len(parts) < 2:
+                            continue
+                            
+                        key = parts[0].strip()
+                        value = parts[1].strip()
+                        
+                        try:
+                            if key == "700mm":
                                 self.CAL_700_RAW = float(value)
-                        elif "625mm:" in line:
-                            value = line.split(":")[1].strip()
-                            if value != "None":  # Handle None case
+                            elif key == "625mm":
                                 self.CAL_625_RAW = float(value)
-                        elif "M_SLOPE:" in line:
-                            value = line.split(":")[1].strip()
-                            if value != "None":  # Handle None case
+                            elif key == "M_SLOPE":
                                 self.M_SLOPE = float(value)
-                        elif "B_OFFS:" in line:
-                            value = line.split(":")[1].strip()
-                            if value != "None":  # Handle None case
+                            elif key == "B_OFFS":
                                 self.B_OFFS = float(value)
-                    
+                        except ValueError:
+                            print(f"Skipping invalid calibration value: {value}")
+                            
                 # Recalculate if values are missing
                 if hasattr(self, 'CAL_700_RAW') and hasattr(self, 'CAL_625_RAW'):
                     self.M_SLOPE = (700.0 - 625.0) / (self.CAL_700_RAW - self.CAL_625_RAW)
@@ -1212,6 +1214,37 @@ class CalibrationPage(QWidget):
         
         self.layout.addStretch(1)
         self.setLayout(self.layout)
+
+    def load_calibration_values(self):
+        try:
+            if os.path.exists("calibration_values.txt"):
+                with open("calibration_values.txt", "r") as f:
+                    lines = f.readlines()
+                    for line in lines:
+                        parts = line.strip().split(':')
+                        if len(parts) < 2:
+                            continue
+                            
+                        key = parts[0].strip()
+                        value = parts[1].strip()
+                        
+                        try:
+                            if key == "700mm":
+                                self.calibration_values['700mm'] = float(value)
+                                self.calib_700_reading.setText(f"Distance: {self.calibration_values['700mm']} mm")
+                            elif key == "625mm":
+                                self.calibration_values['625mm'] = float(value)
+                                self.calib_625_reading.setText(f"Distance: {self.calibration_values['625mm']} mm")
+                            elif key == "700mm_timestamp":
+                                self.calibration_timestamps['700mm'] = value
+                                self.calib_700_timestamp.setText(f"Last calibrated: {value}")
+                            elif key == "625mm_timestamp":
+                                self.calibration_timestamps['625mm'] = value
+                                self.calib_625_timestamp.setText(f"Last calibrated: {value}")
+                        except ValueError:
+                            print(f"Skipping invalid calibration value: {value}")
+        except Exception as e:
+            print(f"Error loading calibration values: {e}")
 
     def create_calibration_group(self, title, button_text):
         group = QFrame()
