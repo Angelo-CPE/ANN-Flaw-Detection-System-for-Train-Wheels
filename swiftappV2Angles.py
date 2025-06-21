@@ -1802,7 +1802,7 @@ class App(QMainWindow):
         diameter_text = f"Wheel Diameter: {diameter:.1f} mm"
         self.inspection_page.diameter_label.setText(diameter_text)
         
-        if diameter <= 620:
+        if diameter <= 630.99:
             color = "#FF0000"
         else:
             color = "#00CC00"

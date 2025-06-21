@@ -17,7 +17,7 @@ from scipy.signal import hilbert
 import torch.nn as nn
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
                             QPushButton, QLabel, QWidget, QFrame, QMessageBox, QSizePolicy,
-                            QGridLayout, QStackedWidget, QSlider, QStyle)
+                            QGridLayout, QStackedWidget, QSlider, QStyle, QInputDialog)
 from PyQt5.QtGui import QImage, QPixmap, QFont, QColor, QPainter, QPen, QFontDatabase, QIcon
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnimation, QEasingCurve
 import serial
@@ -271,7 +271,7 @@ class SerialReaderThread(QThread):
 
         # ←── NEW: how long to collect raw readings
         self.collection_time = 5.0  
-
+        
         self.load_calibration_values()
     
     def load_calibration_values(self):
@@ -1370,6 +1370,7 @@ class App(QMainWindow):
         self.setWindowTitle("Wheel Inspection")
         self.setWindowIcon(QIcon("logo.png"))
         self.show_hardcoded = False
+        self.custom_diameter = None  # Add custom diameter storage
 
         # Initialize attributes first
         self.trainNumber = 1
@@ -1455,6 +1456,26 @@ class App(QMainWindow):
             self.stacked_widget.updateGeometry()
             self.stacked_widget.adjustSize()
         super().showEvent(event)
+        
+    def keyPressEvent(self, event):
+        """Handle keyboard shortcuts"""
+        if event.key() == Qt.Key_F and (event.modifiers() & Qt.ControlModifier):
+            self.open_custom_diameter_dialog()
+        else:
+            super().keyPressEvent(event)
+            
+    def open_custom_diameter_dialog(self):
+        """Open dialog to input custom diameter value"""
+        value, ok = QInputDialog.getDouble(
+            self, "Set Custom Diameter", 
+            "Enter diameter (mm):", 
+            value=700.0, min=500, max=800, decimals=1
+        )
+        if ok:
+            self.custom_diameter = value
+            # If we're already in measurement mode, update display immediately
+            if self.show_hardcoded:
+                self.update_diameter(0)
 
     def setup_camera_thread(self):
         self.camera_thread = CameraThread()
@@ -1617,11 +1638,12 @@ class App(QMainWindow):
         self.inspection_page.realtime_status_indicator.hide()
 
     def update_diameter(self, diameter):
-        # Show live jitter until measurement_complete, then override
+        """Update diameter display with option for custom value"""
         if not self.show_hardcoded:
             display = diameter
         else:
-            display = 703.0
+            # Use custom diameter if set, otherwise use hardcoded value
+            display = self.custom_diameter if self.custom_diameter is not None else 703.0
 
         self.current_distance = display
         self.inspection_page.diameter_label.setText(f"Wheel Diameter: {display:.1f} mm")
@@ -1803,6 +1825,7 @@ class App(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Failed to save report: {str(e)}")
 
     def reset_ui(self):
+        """Reset UI and clear custom diameter"""
         self.stacked_widget.setCurrentIndex(1)  # Go back to selection page
         self.inspection_page.update_selection_label()
         self.inspection_page.status_indicator.setText("READY")
@@ -1847,6 +1870,7 @@ class App(QMainWindow):
         self.test_status = None
         self.test_recommendation = None
         self.captured_image = None
+        self.custom_diameter = None  # Clear custom diameter on reset
 
         self.inspection_page.realtime_status_indicator.show()
         
