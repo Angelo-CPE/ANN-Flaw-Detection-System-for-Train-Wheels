@@ -396,6 +396,7 @@ class CameraThread(QThread):
     enable_buttons_signal = pyqtSignal(bool)
     # New signal for real-time classification
     realtime_classification_signal = pyqtSignal(str, str)
+    UNKNOWN_THRESHOLD = 0.7
 
     def __init__(self):
         super().__init__()
@@ -488,9 +489,15 @@ class CameraThread(QThread):
             
             with torch.no_grad():
                 outputs = self.model(features_tensor)
-                _, predicted = torch.max(outputs, 1)
+                probs = torch.softmax(outputs, dim=1)
+                max_prob, predicted = torch.max(probs, 1)
+                max_prob = max_prob.item()
             
-            if predicted.item() == 1:
+            # Add unknown detection based on confidence threshold
+            if max_prob < self.UNKNOWN_THRESHOLD:
+                status = "UNKNOWN"
+                recommendation = "Position wheel properly"
+            elif predicted.item() == 1:
                 status = "FLAW DETECTED"
                 recommendation = "For Repair/Replacement"
             else:
@@ -518,9 +525,25 @@ class CameraThread(QThread):
             return
 
         try:
-            # Force a flawed result every time “Capture Flaws” is clicked
-            status = "FLAW DETECTED"
-            recommendation = "For Repair/Replacement"
+            features = self.preprocess_image(self.last_frame)
+            features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self.device)
+            
+            with torch.no_grad():
+                outputs = self.model(features_tensor)
+                probs = torch.softmax(outputs, dim=1)
+                max_prob, predicted = torch.max(probs, 1)
+                max_prob = max_prob.item()
+            
+            # Add unknown detection based on confidence threshold
+            if max_prob < self.UNKNOWN_THRESHOLD:
+                status = "UNKNOWN"
+                recommendation = "Position wheel properly"
+            elif predicted.item() == 1:
+                status = "FLAW DETECTED"
+                recommendation = "For Repair/Replacement"
+            else:
+                status = "NO FLAW"
+                recommendation = "For Constant Monitoring"
 
             self.status_signal.emit(status, recommendation)
             self.test_complete_signal.emit(self.last_frame, status, recommendation)
@@ -1371,6 +1394,7 @@ class App(QMainWindow):
         self.setWindowIcon(QIcon("logo.png"))
         self.show_hardcoded = False
         self.custom_diameter = None  # Add custom diameter storage
+        self.simulation_mode = None  # Track simulation state
 
         # Initialize attributes first
         self.trainNumber = 1
@@ -1459,8 +1483,37 @@ class App(QMainWindow):
         
     def keyPressEvent(self, event):
         """Handle keyboard shortcuts"""
-        if event.key() == Qt.Key_F and (event.modifiers() & Qt.ControlModifier):
-            self.open_custom_diameter_dialog()
+        if event.modifiers() & Qt.ControlModifier:
+            if event.key() == Qt.Key_1:
+                # Ctrl+1: Simulate NO FLAW
+                self.simulation_mode = "NO FLAW"
+                self.update_realtime_status("NO FLAW", "For Constant Monitoring")
+                self.update_status("NO FLAW", "For Constant Monitoring")
+            elif event.key() == Qt.Key_2:
+                # Ctrl+2: Simulate FLAW DETECTED
+                self.simulation_mode = "FLAW DETECTED"
+                self.update_realtime_status("FLAW DETECTED", "For Repair/Replacement")
+                self.update_status("FLAW DETECTED", "For Repair/Replacement")
+            elif event.key() == Qt.Key_3:
+                # Ctrl+3: Simulate UNKNOWN
+                self.simulation_mode = "UNKNOWN"
+                self.update_realtime_status("UNKNOWN", "Position wheel properly")
+                self.update_status("UNKNOWN", "Position wheel properly")
+            elif event.key() == Qt.Key_4:
+                # Ctrl+4: Use actual status
+                self.simulation_mode = None
+                # Restore actual classification
+                if hasattr(self.camera_thread, 'last_classification'):
+                    status, recommendation = self.camera_thread.last_classification
+                    self.update_realtime_status(status, recommendation)
+                    self.update_status(status, recommendation)
+                else:
+                    self.update_realtime_status("READY", "")
+                    self.update_status("READY", "")
+            elif event.key() == Qt.Key_F:
+                self.open_custom_diameter_dialog()
+            else:
+                super().keyPressEvent(event)
         else:
             super().keyPressEvent(event)
             
@@ -1490,6 +1543,10 @@ class App(QMainWindow):
 
     def update_realtime_status(self, status, recommendation):
         """Update the real-time classification status in the UI"""
+        # Skip if we're in simulation mode
+        if self.simulation_mode is not None:
+            return
+            
         self.inspection_page.realtime_status_indicator.setText(status)
         
         # Update status color based on classification
@@ -1508,6 +1565,17 @@ class App(QMainWindow):
             self.inspection_page.realtime_status_indicator.setStyleSheet("""
                 QLabel {
                     color: #00CC00;
+                    font-family: 'Montserrat SemiBold';
+                    font-size: 14px;
+                    background-color: rgba(0,0,0,0.5);
+                    padding: 2px 5px;
+                    border-radius: 5px;
+                }
+            """)
+        elif status == "UNKNOWN":  # Add new style for unknown
+            self.inspection_page.realtime_status_indicator.setStyleSheet("""
+                QLabel {
+                    color: yellow;
                     font-family: 'Montserrat SemiBold';
                     font-size: 14px;
                     background-color: rgba(0,0,0,0.5);
@@ -1542,7 +1610,8 @@ class App(QMainWindow):
             ))
 
     def update_status(self, status, recommendation):
-        if status in ["FLAW DETECTED", "NO FLAW"]:
+        # Handle unknown status in diameter label
+        if status in ["FLAW DETECTED", "NO FLAW", "UNKNOWN"]:
             if hasattr(self, 'current_distance') and self.current_distance != 680:
                 self.inspection_page.diameter_label.setText(f"Wheel Diameter: {self.current_distance} mm")
             else:
@@ -1554,6 +1623,7 @@ class App(QMainWindow):
         self.inspection_page.status_indicator.setText(status)
         self.inspection_page.recommendation_indicator.setText(recommendation)
         
+        # Add style for unknown status
         if status == "FLAW DETECTED":
             self.inspection_page.status_indicator.setStyleSheet("""
                 QLabel {
@@ -1582,6 +1652,21 @@ class App(QMainWindow):
                 QLabel {
                     background: black;
                     border: 5px solid #00CC00;
+                }
+            """)
+        elif status == "UNKNOWN":  # New style for unknown
+            self.inspection_page.status_indicator.setStyleSheet("""
+                QLabel {
+                    color: yellow;
+                    font-family: 'Montserrat ExtraBold';
+                    font-size: 18px;
+                    padding: 10px 0;
+                }
+            """)
+            self.inspection_page.camera_label.setStyleSheet("""
+                QLabel {
+                    background: black;
+                    border: 5px solid yellow;
                 }
             """)
         else:
@@ -1871,6 +1956,7 @@ class App(QMainWindow):
         self.test_recommendation = None
         self.captured_image = None
         self.custom_diameter = None  # Clear custom diameter on reset
+        self.simulation_mode = None  # Clear simulation mode
 
         self.inspection_page.realtime_status_indicator.show()
         
