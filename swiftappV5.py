@@ -281,18 +281,33 @@ class SerialReaderThread(QThread):
                     lines = f.readlines()
                     for line in lines:
                         if "700mm:" in line:
-                            self.CAL_700_RAW = float(line.split(":")[1].strip())
+                            value = line.split(":")[1].strip()
+                            if value != "None":  # Handle None case
+                                self.CAL_700_RAW = float(value)
                         elif "625mm:" in line:
-                            self.CAL_625_RAW = float(line.split(":")[1].strip())
+                            value = line.split(":")[1].strip()
+                            if value != "None":  # Handle None case
+                                self.CAL_625_RAW = float(value)
                         elif "M_SLOPE:" in line:
-                            self.M_SLOPE = float(line.split(":")[1].strip())
+                            value = line.split(":")[1].strip()
+                            if value != "None":  # Handle None case
+                                self.M_SLOPE = float(value)
                         elif "B_OFFS:" in line:
-                            self.B_OFFS = float(line.split(":")[1].strip())
-                            
-                # Recalculate in case file was incomplete
-                self.M_SLOPE = (700.0 - 625.0) / (self.CAL_700_RAW - self.CAL_625_RAW)
-                self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
-                
+                            value = line.split(":")[1].strip()
+                            if value != "None":  # Handle None case
+                                self.B_OFFS = float(value)
+                    
+                # Recalculate if values are missing
+                if hasattr(self, 'CAL_700_RAW') and hasattr(self, 'CAL_625_RAW'):
+                    self.M_SLOPE = (700.0 - 625.0) / (self.CAL_700_RAW - self.CAL_625_RAW)
+                    self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
+                else:
+                    # Fallback to defaults
+                    self.CAL_700_RAW = 200.0
+                    self.CAL_625_RAW = 100.0
+                    self.M_SLOPE = (700.0 - 625.0) / (self.CAL_700_RAW - self.CAL_625_RAW)
+                    self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
+                    
                 print("Loaded calibration values:")
                 print(f"CAL_700_RAW: {self.CAL_700_RAW}")
                 print(f"CAL_625_RAW: {self.CAL_625_RAW}")
@@ -378,16 +393,17 @@ class ANNModel(nn.Module):
         self.dropout1 = nn.Dropout(0.2)
         self.fc2 = nn.Linear(256, 128)
         self.fc3 = nn.Linear(128, 64)
-        self.fc4 = nn.Linear(64, 2)
+        # Use 'out' instead of 'fc4' to match saved model
+        self.out = nn.Linear(64, 2)  # Changed to match saved model
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
         x = self.dropout1(x)
         x = torch.relu(self.fc2(x))
         x = torch.relu(self.fc3(x))
-        x = self.fc4(x)
+        x = self.out(x)  # Changed to match saved model
         return x
-
+    
 class CameraThread(QThread):
     change_pixmap_signal = pyqtSignal(QImage)
     status_signal = pyqtSignal(str, str)
