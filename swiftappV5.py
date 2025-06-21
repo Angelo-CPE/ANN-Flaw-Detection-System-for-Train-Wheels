@@ -525,9 +525,10 @@ class CameraThread(QThread):
             # Update last classification
             self.last_classification = (status, recommendation)
             
-            # Emit real-time classification
-            self.realtime_classification_signal.emit(status, recommendation)
-            
+            # Emit real-time classification (only if not in simulation mode)
+            if not hasattr(self, 'simulation_mode') or not self.simulation_mode:
+                self.realtime_classification_signal.emit(status, recommendation)
+
         except Exception as e:
             print(f"Error in real-time classification: {e}")
 
@@ -1534,20 +1535,17 @@ class App(QMainWindow):
         """Handle keyboard shortcuts"""
         if event.modifiers() & Qt.ControlModifier:
             if event.key() == Qt.Key_1:
-                # Ctrl+1: Simulate NO FLAW
+                # Ctrl+1: Simulate NO FLAW (only real-time status)
                 self.simulation_mode = "NO FLAW"
                 self.update_realtime_status("NO FLAW", "For Constant Monitoring")
-                self.update_status("NO FLAW", "For Constant Monitoring")
             elif event.key() == Qt.Key_2:
-                # Ctrl+2: Simulate FLAW DETECTED
+                # Ctrl+2: Simulate FLAW DETECTED (only real-time status)
                 self.simulation_mode = "FLAW DETECTED"
                 self.update_realtime_status("FLAW DETECTED", "For Repair/Replacement")
-                self.update_status("FLAW DETECTED", "For Repair/Replacement")
             elif event.key() == Qt.Key_3:
-                # Ctrl+3: Simulate UNKNOWN
+                # Ctrl+3: Simulate UNKNOWN (only real-time status)
                 self.simulation_mode = "UNKNOWN"
                 self.update_realtime_status("UNKNOWN", "Position wheel properly")
-                self.update_status("UNKNOWN", "Position wheel properly")
             elif event.key() == Qt.Key_4:
                 # Ctrl+4: Use actual status
                 self.simulation_mode = None
@@ -1555,17 +1553,15 @@ class App(QMainWindow):
                 if hasattr(self.camera_thread, 'last_classification'):
                     status, recommendation = self.camera_thread.last_classification
                     self.update_realtime_status(status, recommendation)
-                    self.update_status(status, recommendation)
                 else:
                     self.update_realtime_status("READY", "")
-                    self.update_status("READY", "")
             elif event.key() == Qt.Key_F:
                 self.open_custom_diameter_dialog()
             else:
                 super().keyPressEvent(event)
         else:
             super().keyPressEvent(event)
-            
+
     def open_custom_diameter_dialog(self):
         """Open dialog to input custom diameter value"""
         value, ok = QInputDialog.getDouble(
@@ -1706,7 +1702,7 @@ class App(QMainWindow):
         elif status == "UNKNOWN":  # New style for unknown
             self.inspection_page.status_indicator.setStyleSheet("""
                 QLabel {
-                    color: yellow;
+                    color: black;
                     font-family: 'Montserrat ExtraBold';
                     font-size: 18px;
                     padding: 10px 0;
@@ -1715,7 +1711,7 @@ class App(QMainWindow):
             self.inspection_page.camera_label.setStyleSheet("""
                 QLabel {
                     background: black;
-                    border: 5px solid yellow;
+                    border: 5px solid black;
                 }
             """)
         else:
@@ -1761,12 +1757,27 @@ class App(QMainWindow):
         
         self.camera_thread.start_test()
 
+        # Capture the current frame
         if self.camera_thread.last_frame is not None:
             frame = self.camera_thread.last_frame.copy()
             rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             h, w, ch = rgb_image.shape
             bytes_per_line = ch * w
             self.captured_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        
+        # Use simulation status if active, otherwise use actual classification
+        if self.simulation_mode:
+            status = self.simulation_mode
+            if status == "NO FLAW":
+                recommendation = "For Constant Monitoring"
+            elif status == "FLAW DETECTED":
+                recommendation = "For Repair/Replacement"
+            else:  # UNKNOWN
+                recommendation = "Position wheel properly"
+            self.update_status(status, recommendation)
+            self.handle_test_complete(self.camera_thread.last_frame, status, recommendation)
+        else:
+            self.camera_thread.start_test()
         
         # Hide the real-time status indicator after capturing
         self.inspection_page.realtime_status_indicator.hide()
