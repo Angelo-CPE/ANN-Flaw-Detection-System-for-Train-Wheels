@@ -210,32 +210,56 @@ class CalibrationSerialThread(QThread):
 
     def run(self):
         try:
-            self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=1)
+            print(f"Connecting to {self.port} at {self.baudrate} baud...")
+            self.serial_conn = serial.Serial(
+                self.port,
+                self.baudrate,
+                timeout=1,
+                write_timeout=1,
+                bytesize=serial.EIGHTBITS,
+                parity=serial.PARITY_NONE,
+                stopbits=serial.STOPBITS_ONE
+            )
+            if not self.serial_conn.is_open:
+                raise SerialException(f"Failed to open port {self.port}")
+                
+            print(f"Connected to {self.port}")
             time.sleep(2)  # Wait for Arduino to initialize
+            
+            # Clear input buffer
+            self.serial_conn.reset_input_buffer()
             
             valid_readings = []
             start_time = time.time()
             
             # Collect readings for 2 seconds
             while time.time() - start_time < 2.0 and self._run_flag:
-                if self.serial_conn.in_waiting > 0:
-                    line = self.serial_conn.readline().decode('utf-8').strip()
-                    try:
-                        distance = float(line)
-                        if distance > 0:  # Ignore error values
-                            valid_readings.append(distance)
-                            self.distance_measured.emit(distance)
-                    except ValueError:
-                        pass
-                time.sleep(0.01)
-                
+                try:
+                    if self.serial_conn.in_waiting > 0:
+                        line = self.serial_conn.readline().decode('utf-8').strip()
+                        if line:  # Only process non-empty lines
+                            try:
+                                distance = float(line)
+                                if distance > 0:  # Ignore error values
+                                    valid_readings.append(distance)
+                                    self.distance_measured.emit(distance)
+                            except ValueError:
+                                pass
+                    else:
+                        # Small sleep to prevent CPU overload
+                        time.sleep(0.01)
+                        
+                except SerialException as e:
+                    self.error_occurred.emit(f"Serial error: {str(e)}")
+                    break
+                    
             # Calculate median of valid readings
             if valid_readings:
                 median_distance = float(np.median(valid_readings))
                 self.distance_measured.emit(median_distance)
                 
         except Exception as e:
-            self.error_occurred.emit(str(e))
+            self.error_occurred.emit(f"Error: {str(e)}")
         finally:
             if self.serial_conn and self.serial_conn.is_open:
                 self.serial_conn.close()
@@ -338,25 +362,54 @@ class SerialReaderThread(QThread):
 
     def run(self):
         try:
-            self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=1)
+            print(f"Connecting to {self.port} at {self.baudrate} baud...")
+            self.serial_conn = serial.Serial(
+                self.port,
+                self.baudrate,
+                timeout=1,
+                write_timeout=1,
+                bytesize=serial.EIGHTBITS,
+                parity=serial.PARITY_NONE,
+                stopbits=serial.STOPBITS_ONE
+            )
+            if not self.serial_conn.is_open:
+                raise SerialException(f"Failed to open port {self.port}")
+                
+            print(f"Connected to {self.port}")
             time.sleep(2)  # allow Arduino to wake up
+            
+            # Clear input buffer
+            self.serial_conn.reset_input_buffer()
 
             valid_diameters = []
             start_time = time.time()
+            consecutive_timeouts = 0
 
             # Collect readings for specified duration
             while time.time() - start_time < self.collection_time and self._run_flag:
-                if self.serial_conn.in_waiting > 0:
-                    line = self.serial_conn.readline().decode('utf-8').strip()
-                    try:
-                        raw_mm = float(line)
-                        if raw_mm > 0:
-                            dia = self.calculate_diameter(raw_mm)
-                            valid_diameters.append(dia)
-                            self.diameter_measured.emit(dia)
-                    except ValueError:
-                        pass
-                time.sleep(0.005)
+                try:
+                    if self.serial_conn.in_waiting > 0:
+                        line = self.serial_conn.readline().decode('utf-8').strip()
+                        if line:  # Only process non-empty lines
+                            try:
+                                raw_mm = float(line)
+                                if raw_mm > 0:
+                                    dia = self.calculate_diameter(raw_mm)
+                                    valid_diameters.append(dia)
+                                    self.diameter_measured.emit(dia)
+                                    consecutive_timeouts = 0
+                            except ValueError:
+                                pass
+                    else:
+                        # Small sleep to prevent CPU overload
+                        time.sleep(0.01)
+                        consecutive_timeouts += 1
+                        if consecutive_timeouts > 100:  # ~1 second timeout
+                            raise SerialException("No data received for 1 second")
+                            
+                except SerialException as e:
+                    self.error_occurred.emit(f"Serial error: {str(e)}")
+                    break
 
             # Emit the median of all collected diameters
             if valid_diameters:
@@ -364,7 +417,7 @@ class SerialReaderThread(QThread):
                 self.diameter_measured.emit(median_d)
 
         except Exception as e:
-            self.error_occurred.emit(str(e))
+            self.error_occurred.emit(f"Error: {str(e)}")
 
         finally:
             if self.serial_conn and self.serial_conn.is_open:
@@ -1969,12 +2022,25 @@ class App(QMainWindow):
             self.inspection_page.save_btn.setEnabled(True)
 
     def _detect_serial_port(self):
-        # auto-detect a ttyUSB or ttyACM port
+        """Auto-detect a valid serial port with better heuristics"""
         ports = list_ports.comports()
+        valid_ports = []
+        
         for p in ports:
-            if 'ttyUSB' in p.device or 'ttyACM' in p.device:
-                return p.device
-        raise RuntimeError("No suitable serial port found")
+            # Prioritize common Arduino ports
+            if 'ttyACM' in p.device or 'ttyUSB' in p.device:
+                valid_ports.append(p.device)
+        
+        if valid_ports:
+            print(f"Found valid ports: {valid_ports}")
+            return valid_ports[0]  # Return first found
+        
+        # Fallback to any other port
+        if ports:
+            print(f"Using fallback port: {ports[0].device}")
+            return ports[0].device
+        
+        raise RuntimeError("No serial ports detected")
 
     def measure_diameter(self):
         # Enter live-reading mode
@@ -1986,7 +2052,20 @@ class App(QMainWindow):
         self.inspection_page.save_btn.setEnabled(False)
 
         try:
+            # Print available ports for debugging
+            print("Available ports:")
+            for p in list_ports.comports():
+                print(f"- {p.device}: {p.description}")
+                
             port = self._detect_serial_port()
+            print(f"Using port: {port}")
+            
+            # Reset serial port if previous connection exists
+            if hasattr(self, 'sensor_thread') and self.sensor_thread and self.sensor_thread.isRunning():
+                self.sensor_thread.stop()
+                self.sensor_thread.wait()
+                del self.sensor_thread
+                
             self.sensor_thread = SerialReaderThread(port=port, baudrate=9600, angle=self.angle)
             self.sensor_thread.diameter_measured.connect(self.update_diameter)
             self.sensor_thread.measurement_complete.connect(self.on_diameter_measurement_complete)
@@ -1995,9 +2074,21 @@ class App(QMainWindow):
         except Exception as e:
             self.handle_measurement_error(str(e))
 
-    def handle_measurement_error(self, error_msg):  # New method to handle errors
+    def handle_measurement_error(self, error_msg):
+        """Handle measurement errors with user-friendly messages"""
         print(f"Measurement error: {error_msg}")
-        self.inspection_page.diameter_label.setText("Measurement Error")
+        
+        # Simplified error message for user
+        if "disconnected" in error_msg or "No data" in error_msg:
+            user_msg = "Sensor disconnected. Check connection."
+        elif "Failed to open" in error_msg or "No serial ports" in error_msg:
+            user_msg = "Sensor not found. Check connection."
+        elif "timed out" in error_msg:
+            user_msg = "Sensor timed out. Try again."
+        else:
+            user_msg = "Measurement failed"
+            
+        self.inspection_page.diameter_label.setText(user_msg)
         self.on_diameter_measurement_complete()
 
     def on_diameter_measurement_complete(self):
@@ -2186,7 +2277,7 @@ class App(QMainWindow):
         self.camera_thread.stop()
         if hasattr(self, 'sensor_thread'):
             self.sensor_thread.stop()
-            self.battery_monitor.stop()
+        self.battery_monitor.stop()
         event.accept()
 
 if __name__ == "__main__":
