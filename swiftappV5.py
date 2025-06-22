@@ -1054,7 +1054,7 @@ class InspectionPage(QWidget):
         self.button_layout.setSpacing(10)
         
         # Button style
-        button_style = """
+        button_style_template = """
             QPushButton {
                 background-color: %s;
                 color: white;
@@ -1077,23 +1077,24 @@ class InspectionPage(QWidget):
         
         self.detect_btn = QPushButton("CAPTURE\nFLAWS")
         self.detect_btn.setCursor(Qt.PointingHandCursor)
-        self.detect_btn.setStyleSheet(button_style % ("#e60000", "#cc0000", "#b30000"))
+        self.detect_btn.setStyleSheet(button_style_template % ("#e60000", "#cc0000", "#b30000"))
+        self.detect_btn.setEnabled(False)  # Initially disabled until valid classification
         
         self.measure_btn = QPushButton("MEASURE\nDIAMETER")
         self.measure_btn.setEnabled(False)
         self.measure_btn.setCursor(Qt.PointingHandCursor)
-        self.measure_btn.setStyleSheet(button_style % ("#0066cc", "#0055aa", "#004488"))
+        self.measure_btn.setStyleSheet(button_style_template % ("#0066cc", "#0055aa", "#004488"))
         
         self.save_btn = QPushButton("SAVE\nREPORT")
         self.save_btn.setEnabled(False)
         self.save_btn.setVisible(False)
         self.save_btn.setCursor(Qt.PointingHandCursor)
-        self.save_btn.setStyleSheet(button_style % ("#FFC107", "#FFB300", "#FFA000"))
+        self.save_btn.setStyleSheet(button_style_template % ("#FFC107", "#FFB300", "#FFA000"))
         
         self.reset_btn = QPushButton("NEW\nINSPECTION")
         self.reset_btn.setVisible(False)
         self.reset_btn.setCursor(Qt.PointingHandCursor)
-        self.reset_btn.setStyleSheet(button_style % ("#000000", "#333333", "#222222"))
+        self.reset_btn.setStyleSheet(button_style_template % ("#000000", "#333333", "#222222"))
         
         # Center the buttons horizontally
         self.button_layout.addStretch(1)
@@ -1641,6 +1642,13 @@ class App(QMainWindow):
                     font-size: 14px;
                 }
             """)
+            
+        # Enable/disable detect button based on status
+        if self.captured_image is None and self.test_status is None:  # Only in live mode
+            if status in ["NO FLAW", "FLAW DETECTED"]:
+                self.inspection_page.detect_btn.setEnabled(True)
+            else:
+                self.inspection_page.detect_btn.setEnabled(False)
 
     def update_image(self, qt_image):
         if self.captured_image:
@@ -2004,7 +2012,7 @@ class App(QMainWindow):
         """)
         
         # Reset buttons to initial state
-        self.inspection_page.detect_btn.setEnabled(True)
+        self.inspection_page.detect_btn.setEnabled(False)  # Start disabled until valid classification
         self.inspection_page.detect_btn.setVisible(True)
         self.inspection_page.measure_btn.setEnabled(False)
         self.inspection_page.measure_btn.setVisible(True)
@@ -2022,6 +2030,7 @@ class App(QMainWindow):
         self.live_simulation_mode = None  # Clear simulation mode
 
         self.inspection_page.realtime_status_indicator.show()
+        self.update_realtime_status("READY", "")  # Reset real-time status
         
         # Reload the model for next use
         self.camera_thread.load_model()
