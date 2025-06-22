@@ -1780,6 +1780,14 @@ class App(QMainWindow):
             bytes_per_line = ch * w
             self.captured_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
         
+        pixmap = QPixmap.fromImage(self.captured_image)
+        pixmap = pixmap.scaled(
+                self.inspection_page.camera_label.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+        self.inspection_page.camera_label.setPixmap(pixmap)
+        
         # Use live simulation status if active, otherwise use actual classification
         if self.live_simulation_mode:
             status = self.live_simulation_mode
