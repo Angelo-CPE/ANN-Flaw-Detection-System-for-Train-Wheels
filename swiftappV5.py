@@ -918,7 +918,6 @@ class InspectionPage(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.captured_image = None  # Add this to store captured image
-        self.is_captured_mode = False  # Flag for captured image
         self.setup_ui()
         self.setup_animations()
 
@@ -1871,7 +1870,6 @@ class App(QMainWindow):
             
         self.test_status = status
         self.test_recommendation = recommendation
-        self.captured_image = None  # Clear captured image flag
 
         # After detection, show:
         # - Detect Flaws (disabled)
@@ -2025,7 +2023,7 @@ class App(QMainWindow):
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
-        self.captured_image = None
+        self.captured_image = None  # Clear captured image
         self.custom_diameter = None  # Clear custom diameter on reset
         self.live_simulation_mode = None  # Clear simulation mode
 
