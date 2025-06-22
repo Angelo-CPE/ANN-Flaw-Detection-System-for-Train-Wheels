@@ -1650,21 +1650,26 @@ class App(QMainWindow):
                 self.inspection_page.detect_btn.setEnabled(False)
 
     def update_image(self, qt_image):
+        # Always show the captured image if available
         if self.captured_image:
-            # Display captured image if available
-            self.inspection_page.camera_label.setPixmap(
-                QPixmap.fromImage(self.captured_image).scaled(
+            pixmap = QPixmap.fromImage(self.captured_image)
+            # Scale to fit the label while keeping aspect ratio
+            pixmap = pixmap.scaled(
                 self.inspection_page.camera_label.size(), 
                 Qt.KeepAspectRatio, 
                 Qt.SmoothTransformation
-            ))
-        else:
-            # Otherwise show live feed
-            self.inspection_page.camera_label.setPixmap(QPixmap.fromImage(qt_image).scaled(
+            )
+            self.inspection_page.camera_label.setPixmap(pixmap)
+            return  # Exit after showing captured image
+
+        # Otherwise, show the live feed
+        if qt_image:
+            pixmap = QPixmap.fromImage(qt_image).scaled(
                 self.inspection_page.camera_label.size(), 
                 Qt.KeepAspectRatio, 
                 Qt.SmoothTransformation
-            ))
+            )
+            self.inspection_page.camera_label.setPixmap(pixmap)
 
     def update_status(self, status, recommendation):
         # Handle unknown status in diameter label
