@@ -277,15 +277,25 @@ class SerialReaderThread(QThread):
         try:
             if os.path.exists("calibration_values.txt"):
                 with open("calibration_values.txt", "r") as f:
+                    current_section = None
                     for line in f:
-                        if "Top Calibration" in line:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        if line == "[Top Calibration]":
                             current_section = "Top"
-                        elif "Side Calibration" in line:
+                        elif line == "[Side Calibration]":
                             current_section = "Side"
-                        elif "700mm:" in line and current_section == self.angle:
-                            self.CAL_700_RAW = float(line.split(":")[1].strip())
-                        elif "632mm:" in line and current_section == self.angle:
-                            self.CAL_632_RAW = float(line.split(":")[1].strip())
+                        elif current_section == self.angle:
+                            # Only process lines that are key:value pairs
+                            if ':' in line:
+                                key, value = line.split(':', 1)
+                                key = key.strip()
+                                value = value.strip()
+                                if key == "700mm":
+                                    self.CAL_700_RAW = float(value)
+                                elif key == "632mm":
+                                    self.CAL_632_RAW = float(value)
         except Exception as e:
             print(f"Error loading calibration values: {e}")
             # Fall back to defaults
@@ -1814,16 +1824,6 @@ class App(QMainWindow):
             ))
 
     def update_status(self, status, recommendation):
-        # Handle unknown status in diameter label
-        if status in ["FLAW DETECTED", "NO FLAW", "UNKNOWN"]:
-            if hasattr(self, 'current_distance') and self.current_distance != 0:
-                self.inspection_page.diameter_label.setText(f"Wheel Diameter: {self.current_distance} mm")
-            else:
-                self.inspection_page.diameter_label.setText("Wheel Diameter: Measure Next")
-            self.inspection_page.diameter_label.show()
-        else:
-            self.inspection_page.diameter_label.hide()
-            
         self.inspection_page.status_indicator.setText(status)
         self.inspection_page.recommendation_indicator.setText(recommendation)
         
@@ -1942,14 +1942,17 @@ class App(QMainWindow):
     def update_diameter(self, diameter):
         """Update diameter display with option for custom value"""
         if not self.show_hardcoded:
+            # Live mode: show the actual measurement
             display = diameter
         else:
-            # Use custom diameter if set, otherwise use hardcoded value
-            display = self.custom_diameter if self.custom_diameter is not None else 703.0
+            # After measurement: show custom value if set, otherwise last measurement
+            display = self.custom_diameter if self.custom_diameter is not None else diameter
 
-        self.current_distance = display
-        self.inspection_page.diameter_label.setText(f"Wheel Diameter: {display:.1f} mm")
-        self.inspection_page.diameter_label.show()
+        # Only update if we have a valid measurement
+        if diameter > 0:
+            self.current_distance = display
+            self.inspection_page.diameter_label.setText(f"Wheel Diameter: {display:.1f} mm")
+            self.inspection_page.diameter_label.show()
 
         # Color by threshold
         color = "#FF0000" if display <= 620 else "#00CC00"
@@ -2000,7 +2003,6 @@ class App(QMainWindow):
     def on_diameter_measurement_complete(self):
         # After sampling, switch to hardcoded display
         self.show_hardcoded = True
-        self.update_diameter(0)
         self.inspection_page.detect_btn.setVisible(False)
         self.inspection_page.measure_btn.setVisible(False)
         self.inspection_page.save_btn.setEnabled(True)
