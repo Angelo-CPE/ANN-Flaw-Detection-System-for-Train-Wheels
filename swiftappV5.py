@@ -1830,6 +1830,19 @@ class App(QMainWindow):
         # Enable save when test status exists
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
             self.inspection_page.save_btn.setEnabled(True)
+        # Override recommendation if below 630 mm
+        if display < 630:
+            override = "For Repair/Replacement"
+            # Update both UI and internal recommendation for saving
+            self.inspection_page.recommendation_indicator.setText(override)
+            self.test_recommendation = override
+        else:
+            # Otherwise, keep the result from the flaw test
+            self.inspection_page.recommendation_indicator.setText(self.test_recommendation)
+
+       # Enable save when we have a test status
+        if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
+            self.inspection_page.save_btn.setEnabled(True)
 
     def _detect_serial_port(self):
         # auto-detect a ttyUSB or ttyACM port
