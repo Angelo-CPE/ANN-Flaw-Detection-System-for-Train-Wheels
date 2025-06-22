@@ -1818,7 +1818,7 @@ class App(QMainWindow):
         self.inspection_page.diameter_label.show()
 
         # Color by threshold
-        color = "#FF0000" if display <= 620 else "#00CC00"
+        color = "#FF0000" if display <= 630.99 else "#00CC00"
         self.inspection_page.diameter_label.setStyleSheet(f"""
             QLabel {{
                 color: {color};
@@ -1831,7 +1831,7 @@ class App(QMainWindow):
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
             self.inspection_page.save_btn.setEnabled(True)
         # Override recommendation if below 630 mm
-        if display < 630:
+        if display <= 630.99:
             override = "For Repair/Replacement"
             # Update both UI and internal recommendation for saving
             self.inspection_page.recommendation_indicator.setText(override)
