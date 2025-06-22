@@ -404,20 +404,26 @@ class SerialReaderThread(QThread):
                         # Small sleep to prevent CPU overload
                         time.sleep(0.01)
                         consecutive_timeouts += 1
-                        if consecutive_timeouts > 100:  # ~1 second timeout
-                            raise SerialException("No data received for 1 second")
+                        if consecutive_timeouts > 300:  # Increased from 100 to 300 (~3 seconds)
+                            print("No data received for 3 seconds, continuing...")
+                            consecutive_timeouts = 0
                             
                 except SerialException as e:
                     self.error_occurred.emit(f"Serial error: {str(e)}")
+                    print(f"Serial error: {str(e)}")
                     break
 
             # Emit the median of all collected diameters
             if valid_diameters:
                 median_d = float(np.median(valid_diameters))
                 self.diameter_measured.emit(median_d)
+            else:
+                self.error_occurred.emit("No valid diameter measurements collected")
+                print("No valid diameter measurements collected")
 
         except Exception as e:
             self.error_occurred.emit(f"Error: {str(e)}")
+            print(f"SerialReaderThread error: {str(e)}")
 
         finally:
             if self.serial_conn and self.serial_conn.is_open:
