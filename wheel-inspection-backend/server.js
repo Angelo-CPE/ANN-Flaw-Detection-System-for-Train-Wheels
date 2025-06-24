@@ -827,7 +827,7 @@ app.get('/api/admin/users/all', protect, authorize('admin'), async (req, res) =>
   app.get('/api/reports', protect, async (req, res) => {
     try {
       const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
+      const limit = parseInt(req.query.limit) || 1000;
       const skip = (page - 1) * limit;
       
       const reports = await Report.find()
