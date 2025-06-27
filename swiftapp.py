@@ -1407,14 +1407,23 @@ class App(QMainWindow):
         self.camera_thread.start()
 
     def update_realtime_status(self, status, recommendation):
+        """Control buttons based on REAL-TIME status BEFORE Capture Flaws is clicked"""
         self.inspection_page.realtime_status_indicator.setText(status)
 
         if status in ["FLAW DETECTED", "NO FLAW"]:
+            # Enable Capture Flaws, disable Measure Diameter
             self.inspection_page.detect_btn.setEnabled(True)
             self.inspection_page.measure_btn.setEnabled(False)
             self.inspection_page.save_btn.setEnabled(False)
             self.inspection_page.reset_btn.setVisible(False)
         elif status == "UNKNOWN":
+            # Disable both
+            self.inspection_page.detect_btn.setEnabled(False)
+            self.inspection_page.measure_btn.setEnabled(False)
+            self.inspection_page.save_btn.setEnabled(False)
+            self.inspection_page.reset_btn.setVisible(False)
+        else:
+            # Default fallback
             self.inspection_page.detect_btn.setEnabled(False)
             self.inspection_page.measure_btn.setEnabled(False)
             self.inspection_page.save_btn.setEnabled(False)
@@ -1577,6 +1586,7 @@ class App(QMainWindow):
         self.on_diameter_measurement_complete()
 
     def on_diameter_measurement_complete(self):
+        """After Diameter Measurement: Enable Save Report and New Inspection"""
         self.inspection_page.detect_btn.setVisible(False)
         self.inspection_page.measure_btn.setVisible(False)
         self.inspection_page.save_btn.setEnabled(True)
@@ -1584,6 +1594,7 @@ class App(QMainWindow):
         self.inspection_page.reset_btn.setVisible(True)
 
     def handle_test_complete(self, image, status, recommendation):
+        """After Capture Flaws: Button logic now depends on MAIN STATUS"""
         if image is None or not isinstance(image, np.ndarray) or image.size == 0:
             print("Error: Invalid image received from test")
             self.test_image = None
@@ -1595,12 +1606,13 @@ class App(QMainWindow):
         self.captured_image = None
 
         if status in ["FLAW DETECTED", "NO FLAW"]:
+            # Disable Capture Flaws, Enable Measure Diameter
             self.inspection_page.detect_btn.setEnabled(False)
             self.inspection_page.measure_btn.setEnabled(True)
             self.inspection_page.save_btn.setEnabled(False)
             self.inspection_page.reset_btn.setVisible(False)
         else:
-            #If the main status returned UNKNOWN or ERROR. Keep both buttons disabled
+            # If for some reason the main status is UNKNOWN, keep both buttons disabled
             self.inspection_page.detect_btn.setEnabled(False)
             self.inspection_page.measure_btn.setEnabled(False)
             self.inspection_page.save_btn.setEnabled(False)
