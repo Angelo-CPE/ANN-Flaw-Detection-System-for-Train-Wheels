@@ -1332,6 +1332,8 @@ class App(QMainWindow):
         self.compartmentNumber = 1
         self.wheelNumber = 1
         self.current_distance = 0
+        
+        self.is_captured_mode = False
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
@@ -1407,7 +1409,10 @@ class App(QMainWindow):
         self.camera_thread.start()
 
     def update_realtime_status(self, status, recommendation):
-        """Control buttons based on REAL-TIME status BEFORE Capture Flaws is clicked"""
+        
+        if self.is_captured_mode:
+            return
+
         self.inspection_page.realtime_status_indicator.setText(status)
 
         if status in ["FLAW DETECTED", "NO FLAW"]:
@@ -1506,6 +1511,7 @@ class App(QMainWindow):
         self.trigger_animation()
 
     def detect_flaws(self):
+        self.is_captured_mode = True
         self.inspection_page.status_indicator.setText("ANALYZING...")
         self.inspection_page.status_indicator.setStyleSheet("""
             QLabel {
@@ -1708,6 +1714,7 @@ class App(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Failed to save report: {str(e)}")
 
     def reset_ui(self):
+        self.is_captured_mode = False
         self.stacked_widget.setCurrentIndex(1)
         self.inspection_page.update_selection_label()
         self.inspection_page.status_indicator.setText("READY")
@@ -1748,6 +1755,8 @@ class App(QMainWindow):
 
         #Reset data
         self.current_distance = 0
+        
+        self.is_captured_mode = False
         self.test_image = None
         self.test_status = None
         self.test_recommendation = None
