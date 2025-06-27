@@ -1407,63 +1407,27 @@ class App(QMainWindow):
         self.camera_thread.start()
 
     def update_realtime_status(self, status, recommendation):
-        """Update the real-time classification status in the UI"""
         self.inspection_page.realtime_status_indicator.setText(status)
 
-        # Update color based on status
-        if status == "FLAW DETECTED":
-            self.inspection_page.realtime_status_indicator.setStyleSheet("""
-                QLabel {
-                    color: red;
-                    font-family: 'Montserrat SemiBold';
-                    font-size: 14px;
-                    background-color: rgba(0,0,0,0.5);
-                    padding: 2px 5px;
-                    border-radius: 5px;
-                }
-            """)
+        if status == "FLAW DETECTED" or status == "NO FLAW":
+            # Allow Capture Flaws, Disable Measure Diameter
             self.inspection_page.detect_btn.setEnabled(True)
             self.inspection_page.measure_btn.setEnabled(False)
-
-        elif status == "NO FLAW":
-            self.inspection_page.realtime_status_indicator.setStyleSheet("""
-                QLabel {
-                    color: #00CC00;
-                    font-family: 'Montserrat SemiBold';
-                    font-size: 14px;
-                    background-color: rgba(0,0,0,0.5);
-                    padding: 2px 5px;
-                    border-radius: 5px;
-                }
-            """)
-            self.inspection_page.detect_btn.setEnabled(True)
-            self.inspection_page.measure_btn.setEnabled(False)
-
+            self.inspection_page.save_btn.setEnabled(False)
+            self.inspection_page.reset_btn.setVisible(False)
         elif status == "UNKNOWN":
-            self.inspection_page.realtime_status_indicator.setStyleSheet("""
-                QLabel {
-                    color: #FFA500;
-                    font-family: 'Montserrat SemiBold';
-                    font-size: 14px;
-                    background-color: rgba(0,0,0,0.5);
-                    padding: 2px 5px;
-                    border-radius: 5px;
-                }
-            """)
-            # Gray out both buttons
+            # Disable Both
             self.inspection_page.detect_btn.setEnabled(False)
             self.inspection_page.measure_btn.setEnabled(False)
-
+            self.inspection_page.save_btn.setEnabled(False)
+            self.inspection_page.reset_btn.setVisible(False)
         else:
-            self.inspection_page.realtime_status_indicator.setStyleSheet("""
-                QLabel {
-                    color: #666;
-                    font-family: 'Montserrat Regular';
-                    font-size: 14px;
-                }
-            """)
-            self.inspection_page.detect_btn.setEnabled(True)
-            self.inspection_page.measure_btn.setEnabled(True)
+            # Default fallback
+            self.inspection_page.detect_btn.setEnabled(False)
+            self.inspection_page.measure_btn.setEnabled(False)
+            self.inspection_page.save_btn.setEnabled(False)
+            self.inspection_page.reset_btn.setVisible(False)
+
 
     def update_image(self, qt_image):
         if self.captured_image:
