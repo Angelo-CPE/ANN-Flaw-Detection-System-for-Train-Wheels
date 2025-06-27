@@ -1409,8 +1409,8 @@ class App(QMainWindow):
     def update_realtime_status(self, status, recommendation):
         """Update the real-time classification status in the UI"""
         self.inspection_page.realtime_status_indicator.setText(status)
-        
-        #Update status color based on classification
+
+        # Update color based on status
         if status == "FLAW DETECTED":
             self.inspection_page.realtime_status_indicator.setStyleSheet("""
                 QLabel {
@@ -1422,6 +1422,9 @@ class App(QMainWindow):
                     border-radius: 5px;
                 }
             """)
+            self.inspection_page.detect_btn.setEnabled(True)
+            self.inspection_page.measure_btn.setEnabled(True)
+
         elif status == "NO FLAW":
             self.inspection_page.realtime_status_indicator.setStyleSheet("""
                 QLabel {
@@ -1433,6 +1436,24 @@ class App(QMainWindow):
                     border-radius: 5px;
                 }
             """)
+            self.inspection_page.detect_btn.setEnabled(True)
+            self.inspection_page.measure_btn.setEnabled(True)
+
+        elif status == "UNKNOWN":
+            self.inspection_page.realtime_status_indicator.setStyleSheet("""
+                QLabel {
+                    color: #FFA500;
+                    font-family: 'Montserrat SemiBold';
+                    font-size: 14px;
+                    background-color: rgba(0,0,0,0.5);
+                    padding: 2px 5px;
+                    border-radius: 5px;
+                }
+            """)
+            # Gray out both buttons
+            self.inspection_page.detect_btn.setEnabled(False)
+            self.inspection_page.measure_btn.setEnabled(False)
+
         else:
             self.inspection_page.realtime_status_indicator.setStyleSheet("""
                 QLabel {
@@ -1441,6 +1462,8 @@ class App(QMainWindow):
                     font-size: 14px;
                 }
             """)
+            self.inspection_page.detect_btn.setEnabled(True)
+            self.inspection_page.measure_btn.setEnabled(True)
 
     def update_image(self, qt_image):
         if self.captured_image:
