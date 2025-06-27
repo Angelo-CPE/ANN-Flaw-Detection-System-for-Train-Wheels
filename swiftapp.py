@@ -20,7 +20,6 @@ from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QThread, QPoint, QPropertyAnima
 import serial
 
 def send_report_to_backend(status, recommendation, image_base64, name=None, trainNumber=None, compartmentNumber=None, wheelNumber=None, wheel_diameter=None, token=None):
-    # Validate status before sending
     if status not in ["FLAW DETECTED", "NO FLAW"]:
         print("Invalid status, defaulting to 'NO FLAW'")
         status = "NO FLAW"
@@ -30,7 +29,7 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
     backend_url = "https://ann-flaw-detection-system-for-train.onrender.com/api/reports"
 
     try:
-        # Create a temporary image file from base64
+        #Create a temporary image file
         img_data = base64.b64decode(image_base64)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_img:
             temp_img.write(img_data)
@@ -82,7 +81,7 @@ def send_report_to_backend(status, recommendation, image_base64, name=None, trai
             os.remove(temp_img_path)
 
 class BatteryMonitorThread(QThread):
-    battery_updated = pyqtSignal(float, float)  # voltage, percentage
+    battery_updated = pyqtSignal(float, float)  #voltage, percentage
     
     def __init__(self):
         super().__init__()
@@ -91,10 +90,7 @@ class BatteryMonitorThread(QThread):
         
     def run(self):
         try:
-            # Jetson Nano uses I2C bus 1 (like Raspberry Pi models 2 and later)
             bus_number = 1
-            
-            # Initialize INA219 with correct parameters for Jetson Nano
             self.ina = INA219(
                 shunt_ohms=0.1,
                 max_expected_amps=0.6,
@@ -112,8 +108,7 @@ class BatteryMonitorThread(QThread):
         while self._run_flag:
             try:
                 voltage = self.ina.voltage()
-                # Calculate percentage for 2-cell Li-ion battery
-                # (6.0V = 0%, 8.4V = 100%)
+                # (6.0 V = 0%, 8.4 V = 100%)
                 percentage = min(100, max(0, (voltage - 6.0) / (8.4 - 6.0) * 100))
                 self.battery_updated.emit(voltage, percentage)
             except DeviceRangeError as e:
@@ -121,7 +116,7 @@ class BatteryMonitorThread(QThread):
             except Exception as e:
                 print(f"Battery monitor error: {e}")
             
-            time.sleep(5)  # Update every 5 seconds
+            time.sleep(5)
     
     def stop(self):
         self._run_flag = False
@@ -135,17 +130,17 @@ class BatteryIndicator(QWidget):
         self.percentage = 0
         self.setStyleSheet("background: transparent;")
         
-        # Set size based on whether it's compact mode
         if compact:
-            self.setFixedSize(50, 25)
+            self.setFixedSize(50, 25) #smaller size of battery ui
         else:
-            self.setFixedSize(80, 40)
+            self.setFixedSize(80, 40) #default size
         
     def update_battery(self, voltage, percentage):
         self.voltage = voltage
         self.percentage = percentage
-        self.update()  # Trigger repaint
-        
+        self.update()
+    
+    #for battery design
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
@@ -153,7 +148,6 @@ class BatteryIndicator(QWidget):
         w = self.width()
         h = self.height()
         
-        # Draw battery outline
         body_width = w * 0.7
         body_height = h * 0.6
         tip_width = w * 0.1
@@ -167,33 +161,30 @@ class BatteryIndicator(QWidget):
         painter.setPen(QPen(Qt.black, 1))
         painter.setBrush(Qt.transparent)
         painter.drawRoundedRect(body_x, body_y, body_width, body_height, 2, 2)
-        painter.drawRect(tip_x, tip_y, tip_width, tip_height)  # Battery tip
+        painter.drawRect(tip_x, tip_y, tip_width, tip_height)
         
-        # Calculate fill width based on percentage
         fill_width = max(0, min(body_width - 4, (body_width - 4) * self.percentage / 100))
         
-        # Choose color based on battery level
         if self.percentage > 60:
-            color = QColor(0, 200, 0)  # Green
+            color = QColor(0, 200, 0)  #Green if above 60%
         elif self.percentage > 20:
-            color = QColor(255, 165, 0)  # Orange
+            color = QColor(255, 165, 0)  #Orange if above 20%
         else:
-            color = QColor(220, 0, 0)  # Red
+            color = QColor(220, 0, 0)  #Red if below 20%
         
-        # Draw battery fill
         painter.setPen(Qt.NoPen)
         painter.setBrush(color)
         painter.drawRoundedRect(body_x+2, body_y+2, fill_width, body_height-4, 1, 1)
         
-        # Draw percentage text only in non-compact mode
         if not self.compact:
             painter.setPen(Qt.black)
             font = QFont("Arial", 8)
             painter.setFont(font)
             painter.drawText(0, 0, w, h, Qt.AlignCenter, f"{int(self.percentage)}%")
 
+#for tof sensor setting in calibration
 class CalibrationSerialThread(QThread):
-    distance_measured = pyqtSignal(float)  # Raw distance in mm
+    distance_measured = pyqtSignal(float)
     measurement_complete = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
@@ -207,12 +198,12 @@ class CalibrationSerialThread(QThread):
     def run(self):
         try:
             self.serial_conn = serial.Serial(self.port, self.baudrate, timeout=1)
-            time.sleep(2)  # Wait for Arduino to initialize
+            time.sleep(2)
             
             valid_readings = []
             start_time = time.time()
             
-            # Collect readings for 2 seconds
+            #collect readings for 2 seconds
             while time.time() - start_time < 2.0 and self._run_flag:
                 if self.serial_conn.in_waiting > 0:
                     line = self.serial_conn.readline().decode('utf-8').strip()
@@ -224,8 +215,7 @@ class CalibrationSerialThread(QThread):
                     except ValueError:
                         pass
                 time.sleep(0.01)
-                
-            # Calculate median of valid readings
+
             if valid_readings:
                 median_distance = float(np.median(valid_readings))
                 self.distance_measured.emit(median_distance)
@@ -246,17 +236,15 @@ class SerialReaderThread(QThread):
     measurement_complete = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
-    # Constants from Arduino code
-    CHORD_L = 0.250  # metres (exact pad spacing)
+    CHORD_L = 0.250  # metres
     LEVER_GAIN = 3.00  # 3× mechanical amplifier
     LIFT_OFF_MM = 38.0  # sensor→lever gap when off-wheel
     
-    # Calibration constants (update these with your actual calibration values)
-    CAL_700_RAW = 200.0  # gap on 700 mm ring (bigger gap)
-    CAL_625_RAW = 100.0  # gap on 625 mm ring (smaller gap)
+    # Calibration constants (default values for error handling)
+    CAL_700_RAW = 38.0  
+    CAL_610_RAW = 49.0
     
-    # Calculated constants
-    M_SLOPE = (700.0 - 625.0) / (CAL_700_RAW - CAL_625_RAW)
+    M_SLOPE = (700.0 - 610.0) / (CAL_700_RAW - CAL_610_RAW)
     B_OFFS = 700.0 - M_SLOPE * CAL_700_RAW
 
     def __init__(self, port='/dev/ttyACM0', baudrate=9600):
@@ -265,10 +253,7 @@ class SerialReaderThread(QThread):
         self.port       = port
         self.baudrate   = baudrate
         self.serial_conn = None
-
-        # ←── NEW: how long to collect raw readings
         self.collection_time = 5.0  
-
         self.load_calibration_values()
     
     def load_calibration_values(self):
@@ -279,28 +264,27 @@ class SerialReaderThread(QThread):
                     for line in lines:
                         if "700mm:" in line:
                             self.CAL_700_RAW = float(line.split(":")[1].strip())
-                        elif "625mm:" in line:
-                            self.CAL_625_RAW = float(line.split(":")[1].strip())
+                        elif "610mm:" in line:
+                            self.CAL_610_RAW = float(line.split(":")[1].strip())
                         elif "M_SLOPE:" in line:
                             self.M_SLOPE = float(line.split(":")[1].strip())
                         elif "B_OFFS:" in line:
                             self.B_OFFS = float(line.split(":")[1].strip())
                             
-                # Recalculate in case file was incomplete
-                self.M_SLOPE = (700.0 - 625.0) / (self.CAL_700_RAW - self.CAL_625_RAW)
+                #Recalculate in case file was incomplete
+                self.M_SLOPE = (700.0 - 610.0) / (self.CAL_700_RAW - self.CAL_610_RAW)
                 self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
                 
                 print("Loaded calibration values:")
                 print(f"CAL_700_RAW: {self.CAL_700_RAW}")
-                print(f"CAL_625_RAW: {self.CAL_625_RAW}")
+                print(f"CAL_610_RAW: {self.CAL_610_RAW}")
                 print(f"M_SLOPE: {self.M_SLOPE}")
                 print(f"B_OFFS: {self.B_OFFS}")
         except Exception as e:
             print(f"Error loading calibration values: {e}")
-            # Fall back to defaults
-            self.CAL_700_RAW = 200.0
-            self.CAL_625_RAW = 100.0
-            self.M_SLOPE = (700.0 - 625.0) / (self.CAL_700_RAW - self.CAL_625_RAW)
+            self.CAL_700_RAW = 38.0
+            self.CAL_610_RAW = 49.0
+            self.M_SLOPE = (700.0 - 610.0) / (self.CAL_700_RAW - self.CAL_610_RAW)
             self.B_OFFS = 700.0 - self.M_SLOPE * self.CAL_700_RAW
 
     def calculate_diameter(self, raw_mm):
@@ -316,10 +300,10 @@ class SerialReaderThread(QThread):
 
         # 2) compute the “true” gaps for your two calibration rings
         gap_700 = true_gap(700.0)
-        gap_625 = true_gap(625.0)
+        gap_610 = true_gap(610.0)
 
         # 3) build the linear map raw_reading → gap (mm)
-        M = (gap_625 - gap_700) / (self.CAL_625_RAW - self.CAL_700_RAW)
+        M = (gap_610 - gap_700) / (self.CAL_610_RAW - self.CAL_700_RAW)
         B = gap_700 - M * self.CAL_700_RAW
 
         # 4) map *this* raw to a gap
@@ -1096,8 +1080,8 @@ class CalibrationPage(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.setup_ui()
-        self.calibration_values = {"700mm": None, "625mm": None}
-        self.calibration_timestamps = {"700mm": None, "625mm": None}  # New dictionary for timestamps
+        self.calibration_values = {"700mm": None, "610mm": None}
+        self.calibration_timestamps = {"700mm": None, "610mm": None}
         self.current_reading = None
         self.load_calibration_values()
 
@@ -1156,9 +1140,9 @@ class CalibrationPage(QWidget):
         self.calib_700_group = self.create_calibration_group("700 mm Train Wheel", "1st Calibration")
         self.layout.addWidget(self.calib_700_group)
         
-        # 625mm Calibration Section
-        self.calib_625_group = self.create_calibration_group("625 mm Train Wheel", "2nd Calibration")
-        self.layout.addWidget(self.calib_625_group)
+        # 610mm Calibration Section
+        self.calib_610_group = self.create_calibration_group("610 mm Train Wheel", "2nd Calibration")
+        self.layout.addWidget(self.calib_610_group)
         
         # Status Label
         self.status_label = QLabel()
@@ -1249,10 +1233,10 @@ class CalibrationPage(QWidget):
             self.calib_700_timestamp = timestamp_label  # New reference
             calib_button.clicked.connect(lambda: self.start_measurement("700mm"))
         else:
-            self.calib_625_reading = reading_label
-            self.calib_625_button = calib_button
-            self.calib_625_timestamp = timestamp_label  # New reference
-            calib_button.clicked.connect(lambda: self.start_measurement("625mm"))
+            self.calib_610_reading = reading_label
+            self.calib_610_button = calib_button
+            self.calib_610_timestamp = timestamp_label  # New reference
+            calib_button.clicked.connect(lambda: self.start_measurement("610mm"))
             
         layout.addWidget(calib_button)
         
@@ -1262,13 +1246,13 @@ class CalibrationPage(QWidget):
     def start_measurement(self, wheel_type):
         # Disable both buttons during measurement
         self.calib_700_button.setEnabled(False)
-        self.calib_625_button.setEnabled(False)
+        self.calib_610_button.setEnabled(False)
         
         # Clear previous readings
         if wheel_type == "700mm":
             self.calib_700_reading.setText("Measuring...")
         else:
-            self.calib_625_reading.setText("Measuring...")
+            self.calib_610_reading.setText("Measuring...")
         
         try:
             self.serial_thread = CalibrationSerialThread()
@@ -1286,7 +1270,7 @@ class CalibrationPage(QWidget):
         if wheel_type == "700mm":
             self.calib_700_reading.setText(f"Distance: {distance} mm")
         else:
-            self.calib_625_reading.setText(f"Distance: {distance} mm")
+            self.calib_610_reading.setText(f"Distance: {distance} mm")
 
     def on_measurement_complete(self, wheel_type):
         if self.current_reading is not None:
@@ -1299,7 +1283,7 @@ class CalibrationPage(QWidget):
             if wheel_type == "700mm":
                 self.calib_700_timestamp.setText(f"Last calibrated: {current_time}")
             else:
-                self.calib_625_timestamp.setText(f"Last calibrated: {current_time}")
+                self.calib_610_timestamp.setText(f"Last calibrated: {current_time}")
                 
             self.status_label.setText(f"{wheel_type} calibrated at {self.current_reading} mm")
             
@@ -1307,11 +1291,11 @@ class CalibrationPage(QWidget):
             if wheel_type == "700mm":
                 SerialReaderThread.CAL_700_RAW = self.current_reading
             else:
-                SerialReaderThread.CAL_625_RAW = self.current_reading
+                SerialReaderThread.CAL_610_RAW = self.current_reading
                 
             # Recalculate the slope and offset
-            SerialReaderThread.M_SLOPE = (700.0 - 625.0) / (
-                SerialReaderThread.CAL_700_RAW - SerialReaderThread.CAL_625_RAW
+            SerialReaderThread.M_SLOPE = (700.0 - 610.0) / (
+                SerialReaderThread.CAL_700_RAW - SerialReaderThread.CAL_610_RAW
             )
             SerialReaderThread.B_OFFS = 700.0 - SerialReaderThread.M_SLOPE * SerialReaderThread.CAL_700_RAW
             
@@ -1319,27 +1303,27 @@ class CalibrationPage(QWidget):
         
         # Re-enable buttons
         self.calib_700_button.setEnabled(True)
-        self.calib_625_button.setEnabled(True)
+        self.calib_610_button.setEnabled(True)
 
     def handle_serial_error(self, error_msg):
         self.status_label.setText(f"Error: {error_msg}")
         # Re-enable buttons on error
         self.calib_700_button.setEnabled(True)
-        self.calib_625_button.setEnabled(True)
+        self.calib_610_button.setEnabled(True)
 
     def save_calibration_values(self):
         # Save to file with the new format that includes recalculated constants and timestamps
         print("Calibration values:", self.calibration_values)
         with open("calibration_values.txt", "w") as f:
             f.write(f"700mm: {self.calibration_values['700mm']}\n")
-            f.write(f"625mm: {self.calibration_values['625mm']}\n")
+            f.write(f"610mm: {self.calibration_values['610mm']}\n")
             f.write(f"M_SLOPE: {SerialReaderThread.M_SLOPE}\n")
             f.write(f"B_OFFS: {SerialReaderThread.B_OFFS}\n")
             # Save timestamps if they exist
             if self.calibration_timestamps['700mm']:
                 f.write(f"700mm_timestamp: {self.calibration_timestamps['700mm']}\n")
-            if self.calibration_timestamps['625mm']:
-                f.write(f"625mm_timestamp: {self.calibration_timestamps['625mm']}\n")
+            if self.calibration_timestamps['610mm']:
+                f.write(f"610mm_timestamp: {self.calibration_timestamps['610mm']}\n")
 
     def load_calibration_values(self):
         try:
@@ -1350,15 +1334,15 @@ class CalibrationPage(QWidget):
                         if "700mm:" in line and not "timestamp" in line:
                             self.calibration_values['700mm'] = float(line.split(":")[1].strip())
                             self.calib_700_reading.setText(f"Distance: {self.calibration_values['700mm']} mm")
-                        elif "625mm:" in line and not "timestamp" in line:
-                            self.calibration_values['625mm'] = float(line.split(":")[1].strip())
-                            self.calib_625_reading.setText(f"Distance: {self.calibration_values['625mm']} mm")
+                        elif "610mm:" in line and not "timestamp" in line:
+                            self.calibration_values['610mm'] = float(line.split(":")[1].strip())
+                            self.calib_610_reading.setText(f"Distance: {self.calibration_values['610mm']} mm")
                         elif "700mm_timestamp:" in line:
                             self.calibration_timestamps['700mm'] = line.split(":")[1].strip()
                             self.calib_700_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['700mm']}")
-                        elif "625mm_timestamp:" in line:
-                            self.calibration_timestamps['625mm'] = line.split(":")[1].strip()
-                            self.calib_625_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['625mm']}")
+                        elif "610mm_timestamp:" in line:
+                            self.calibration_timestamps['610mm'] = line.split(":")[1].strip()
+                            self.calib_610_timestamp.setText(f"Last calibrated: {self.calibration_timestamps['610mm']}")
                         elif "M_SLOPE:" in line:
                             SerialReaderThread.M_SLOPE = float(line.split(":")[1].strip())
                         elif "B_OFFS:" in line:
@@ -1859,10 +1843,10 @@ if __name__ == "__main__":
     if "Montserrat Regular" not in font_db.families():
         # Try to load the font from file if not found
         font_paths = {
-            "Montserrat Regular": "Montserrat-Regular.ttf",
-            "Montserrat Bold": "Montserrat-Bold.ttf",
-            "Montserrat ExtraBold": "Montserrat-ExtraBold.ttf",
-            "Montserrat Black": "Montserrat-Black.ttf"
+            "Montserrat Regular": "fonts/Montserrat-Regular.ttf",
+            "Montserrat Bold": "fonts/Montserrat-Bold.ttf",
+            "Montserrat ExtraBold": "fonts/Montserrat-ExtraBold.ttf",
+            "Montserrat Black": "fonts/Montserrat-Black.ttf"
         }
         for font_name, path in font_paths.items():
             if not os.path.exists(path):
