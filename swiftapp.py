@@ -456,24 +456,30 @@ class CameraThread(QThread):
         try:
             features = self.preprocess_image(self.last_frame)
             features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self.device)
-            
+
             with torch.no_grad():
                 outputs = self.model(features_tensor)
-                _, predicted = torch.max(outputs, 1)
-            
-            if predicted.item() == 1:
+                probabilities = torch.softmax(outputs, dim=1)
+                confidence, predicted = torch.max(probabilities, 1)
+
+            confidence_value = confidence.item()
+
+            if confidence_value < 0.7:
+                status = "UNKNOWN"
+                recommendation = "Please Reposition and Retest"
+            elif predicted.item() == 1:
                 status = "FLAW DETECTED"
                 recommendation = "For Repair/Replacement"
             else:
                 status = "NO FLAW"
                 recommendation = "For Constant Monitoring"
-            
+
             self.last_classification = (status, recommendation)
-            
             self.realtime_classification_signal.emit(status, recommendation)
-            
+
         except Exception as e:
             print(f"Error in real-time classification: {e}")
+
 
     def start_test(self):
         self._testing = True
