@@ -236,9 +236,9 @@ class SerialReaderThread(QThread):
     measurement_complete = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
-    CHORD_L = 0.250  # metres
-    LEVER_GAIN = 3.00  # 3× mechanical amplifier
-    LIFT_OFF_MM = 38.0  # sensor→lever gap when off-wheel
+    CHORD_L = 0.250  #metres
+    LEVER_GAIN = 3.00  #3× mechanical amplifier
+    LIFT_OFF_MM = 38.0  #sensor to lever gap when not in contact with wheel surface
     
     # Calibration constants (default values for error handling)
     CAL_700_RAW = 38.0  
@@ -362,18 +362,19 @@ class ANNModel(nn.Module):
     def __init__(self, input_size):
         super(ANNModel, self).__init__()
         self.fc1 = nn.Linear(input_size, 256)
-        self.dropout1 = nn.Dropout(0.2)
+        self.drop1 = nn.Dropout(0.3)
         self.fc2 = nn.Linear(256, 128)
+        self.drop2 = nn.Dropout(0.3)
         self.fc3 = nn.Linear(128, 64)
-        self.fc4 = nn.Linear(64, 2)
+        self.out = nn.Linear(64, 2)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
-        x = self.dropout1(x)
+        x = self.drop1(x)
         x = torch.relu(self.fc2(x))
+        x = self.drop2(x)
         x = torch.relu(self.fc3(x))
-        x = self.fc4(x)
-        return x
+        return self.out(x)
 
 class CameraThread(QThread):
     change_pixmap_signal = pyqtSignal(QImage)
