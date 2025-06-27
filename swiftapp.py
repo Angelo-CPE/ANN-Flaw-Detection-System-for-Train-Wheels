@@ -1409,25 +1409,16 @@ class App(QMainWindow):
     def update_realtime_status(self, status, recommendation):
         self.inspection_page.realtime_status_indicator.setText(status)
 
-        if status == "FLAW DETECTED" or status == "NO FLAW":
-            # Allow Capture Flaws, Disable Measure Diameter
+        if status in ["FLAW DETECTED", "NO FLAW"]:
             self.inspection_page.detect_btn.setEnabled(True)
             self.inspection_page.measure_btn.setEnabled(False)
             self.inspection_page.save_btn.setEnabled(False)
             self.inspection_page.reset_btn.setVisible(False)
         elif status == "UNKNOWN":
-            # Disable Both
             self.inspection_page.detect_btn.setEnabled(False)
             self.inspection_page.measure_btn.setEnabled(False)
             self.inspection_page.save_btn.setEnabled(False)
             self.inspection_page.reset_btn.setVisible(False)
-        else:
-            # Default fallback
-            self.inspection_page.detect_btn.setEnabled(False)
-            self.inspection_page.measure_btn.setEnabled(False)
-            self.inspection_page.save_btn.setEnabled(False)
-            self.inspection_page.reset_btn.setVisible(False)
-
 
     def update_image(self, qt_image):
         if self.captured_image:
@@ -1603,16 +1594,17 @@ class App(QMainWindow):
         self.test_recommendation = recommendation
         self.captured_image = None
 
-        # After detection, show:
-        # - Detect Flaws (disabled)
-        # - Measure Diameter (enabled)
-        self.inspection_page.detect_btn.setEnabled(False)
-        self.inspection_page.detect_btn.setVisible(True)
-        self.inspection_page.measure_btn.setEnabled(True)
-        self.inspection_page.measure_btn.setVisible(True)
-        self.inspection_page.save_btn.setEnabled(False)
-        self.inspection_page.save_btn.setVisible(False)
-        self.inspection_page.reset_btn.setVisible(False)
+        if status in ["FLAW DETECTED", "NO FLAW"]:
+            self.inspection_page.detect_btn.setEnabled(False)
+            self.inspection_page.measure_btn.setEnabled(True)
+            self.inspection_page.save_btn.setEnabled(False)
+            self.inspection_page.reset_btn.setVisible(False)
+        else:
+            #If the main status returned UNKNOWN or ERROR. Keep both buttons disabled
+            self.inspection_page.detect_btn.setEnabled(False)
+            self.inspection_page.measure_btn.setEnabled(False)
+            self.inspection_page.save_btn.setEnabled(False)
+            self.inspection_page.reset_btn.setVisible(False)
 
     def set_buttons_enabled(self, enabled):
         if hasattr(self, 'test_status') and self.test_status in ["FLAW DETECTED", "NO FLAW"]:
