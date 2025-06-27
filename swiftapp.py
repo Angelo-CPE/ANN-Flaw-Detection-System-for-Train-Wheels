@@ -1423,7 +1423,7 @@ class App(QMainWindow):
                 }
             """)
             self.inspection_page.detect_btn.setEnabled(True)
-            self.inspection_page.measure_btn.setEnabled(True)
+            self.inspection_page.measure_btn.setEnabled(False)
 
         elif status == "NO FLAW":
             self.inspection_page.realtime_status_indicator.setStyleSheet("""
@@ -1437,7 +1437,7 @@ class App(QMainWindow):
                 }
             """)
             self.inspection_page.detect_btn.setEnabled(True)
-            self.inspection_page.measure_btn.setEnabled(True)
+            self.inspection_page.measure_btn.setEnabled(False)
 
         elif status == "UNKNOWN":
             self.inspection_page.realtime_status_indicator.setStyleSheet("""
