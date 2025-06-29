@@ -464,7 +464,7 @@ class CameraThread(QThread):
 
             confidence_value = confidence.item()
 
-            if confidence_value < 0.8:
+            if confidence_value < 0.7:
                 status = "UNKNOWN"
                 recommendation = "Please Reposition and Retest"
             elif predicted.item() == 1:
