@@ -2078,10 +2078,10 @@ if __name__ == "__main__":
     if "Montserrat Regular" not in font_db.families():
         # Try to load the font from file if not found
         font_paths = {
-            "Montserrat Regular": "Montserrat-Regular.ttf",
-            "Montserrat Bold": "Montserrat-Bold.ttf",
-            "Montserrat ExtraBold": "Montserrat-ExtraBold.ttf",
-            "Montserrat Black": "Montserrat-Black.ttf"
+            "Montserrat Regular": "fonts/Montserrat-Regular.ttf",
+            "Montserrat Bold": "fonts/Montserrat-Bold.ttf",
+            "Montserrat ExtraBold": "fonts/Montserrat-ExtraBold.ttf",
+            "Montserrat Black": "fonts/Montserrat-Black.ttf"
         }
         for font_name, path in font_paths.items():
             if not os.path.exists(path):
