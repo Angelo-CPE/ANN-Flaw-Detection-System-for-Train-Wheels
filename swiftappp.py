@@ -860,7 +860,7 @@ class InspectionPage(QWidget):
         self.camera_panel.setStyleSheet("QFrame { background: white; border: 5px solid transparent; }")
         self.camera_layout = QVBoxLayout()
         self.camera_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         self.camera_label = QLabel()
         self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setMinimumSize(480, 360)
@@ -872,22 +872,22 @@ class InspectionPage(QWidget):
             }
         """)
         self.camera_layout.addWidget(self.camera_label)
-        
-        # LIVE STATUS BELOW CAMERA
+
+        # --- NEW: Animated Live Status block (below camera feed) ---
         self.live_status_label = QLabel("READY")
         self.live_status_label.setAlignment(Qt.AlignCenter)
         self.live_status_label.setStyleSheet("""
             QLabel {
                 color: #666;
-                font-family: 'Montserrat Bold';
+                background-color: #f5f5f5;
+                font-family: 'Montserrat ExtraBold';
                 font-size: 20px;
-                background-color: #f0f0f0;
-                border-radius: 8px;
+                border-radius: 10px;
                 padding: 8px 16px;
             }
         """)
         self.camera_layout.addWidget(self.live_status_label, alignment=Qt.AlignCenter)
-        
+
         self.camera_panel.setLayout(self.camera_layout)
         self.layout.addWidget(self.camera_panel, stretch=1)
 
@@ -932,7 +932,7 @@ class InspectionPage(QWidget):
         """)
         self.status_layout.addWidget(self.status_title)
 
-        # MAIN STATUS INDICATOR (animated color transitions)
+        # MAIN STATUS INDICATOR
         self.status_indicator = QLabel("READY")
         self.status_indicator.setAlignment(Qt.AlignCenter)
         self.status_indicator.setStyleSheet("""
@@ -975,18 +975,17 @@ class InspectionPage(QWidget):
 
         self.status_panel.setLayout(self.status_layout)
         self.control_layout.addWidget(self.status_panel)
-
         self.layout.addWidget(self.control_panel, stretch=0)
         self.setLayout(self.layout)
 
-    # ------------------ ANIMATIONS ------------------
+    # ------------------ Live Status Animation Setup ------------------
     def setup_animations(self):
-        self.status_anim = QPropertyAnimation(self.status_indicator, b"styleSheet")
+        self.status_anim = QPropertyAnimation(self.live_status_label, b"styleSheet")
         self.status_anim.setDuration(500)
         self.status_anim.setEasingCurve(QEasingCurve.InOutCubic)
 
-    def animate_status(self, status):
-        """Animate status color transitions."""
+    def animate_live_status(self, status):
+        """Animate the Live Status label (colors + transitions)."""
         if status == "FLAW DETECTED":
             color = "#ff0000"
             bg = "#ffe6e6"
@@ -994,29 +993,38 @@ class InspectionPage(QWidget):
             color = "#00b300"
             bg = "#e6ffe6"
         elif status == "UNKNOWN":
-            color = "#ffa500"
-            bg = "#fff5e6"
+            color = "#ff9900"
+            bg = "#fff4e0"
         else:
-            color = "#444"
+            color = "#666"
             bg = "#f5f5f5"
 
-        self.status_anim.stop()
         style = f"""
             QLabel {{
                 color: {color};
-                font-family: 'Montserrat ExtraBold';
-                font-size: 22px;
-                padding: 6px 12px;
-                border-radius: 8px;
                 background-color: {bg};
+                font-family: 'Montserrat ExtraBold';
+                font-size: 20px;
+                border-radius: 10px;
+                padding: 8px 16px;
             }}
         """
-        self.status_anim.setStartValue(self.status_indicator.styleSheet())
+        self.status_anim.stop()
+        self.status_anim.setStartValue(self.live_status_label.styleSheet())
         self.status_anim.setEndValue(style)
         self.status_anim.start()
-        self.status_indicator.setStyleSheet(style)
+        self.live_status_label.setStyleSheet(style)
 
-    # ------------------ UPDATERS ------------------
+    def update_live_status(self, status, recommendation):
+        """Update both label text and animation."""
+        self.live_status_label.setText(status)
+        self.animate_live_status(status)
+
+    def connect_live_signals(self, camera_thread):
+        """Connect camera signals to Live Status UI."""
+        camera_thread.realtime_classification_signal.connect(self.update_live_status)
+        camera_thread.status_signal.connect(self.update_live_status)
+
     def update_selection_label(self):
         self.selection_label.setText(
             f"Train {getattr(self.parent, 'trainNumber', 1)} • "
@@ -1024,22 +1032,9 @@ class InspectionPage(QWidget):
             f"Wheel {getattr(self.parent, 'wheelNumber', 1)}"
         )
 
-    def update_live_status(self, status, recommendation):
-        """Called from realtime classification and test complete signals."""
-        self.status_indicator.setText(status)
-        self.recommendation_indicator.setText(recommendation)
-        self.live_status_label.setText(status)
-        self.animate_status(status)
-
-    # ------------------ SIGNAL CONNECTION ------------------
-    def connect_signals(self, camera_thread):
-        """Connect camera signals to this page."""
-        camera_thread.change_pixmap_signal.connect(self.update_image)
-        camera_thread.realtime_classification_signal.connect(self.update_live_status)
-        camera_thread.status_signal.connect(self.update_live_status)
-
     def update_image(self, qt_image):
         self.camera_label.setPixmap(QPixmap.fromImage(qt_image))
+
 
 class CalibrationPage(QWidget):
     def __init__(self, parent=None):
